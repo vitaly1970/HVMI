@@ -377,20 +377,20 @@ function moduleView(m,ddFrac){
   if(ddFrac<=MOD.YEL){                                   // жёлтая зона → базовая доля 40/60
     label='Жёлтая зона: просадка глубже −5,3%';dot=DOT.warn;col=COL.warn;dist=W40;
     ind=[`просадка QQQ <b>${pc1(ddFrac*100)}</b>`,
-         `сигналы тренда не исполняются, пока просадка глубже −5,3%`];
-    act='держать базовые доли, сигнал тренда их не изменит';
+         `пока просадка глубже −5,3%, доли не меняются по тренду — даже если наклон EMA20 говорит об обратном`];
+    act='держать '+W40;
   }else if(m.state==='RISKOFF'){                         // сниженная доля 20/80
     dist=W20;dot=DOT.warn;col=COL.warn;
     if(m.cr>0){                                          // отклонение снижается → базовая доля
       label='Отклонение спадает, доля скоро вернётся к базовой';
       ind=[`${rel} — ниже порога 12%`,
            `возврат к базовой доле: <b>${m.cr}</b> из 3 подтверждений`];
-      act='пока держать сниженную долю; при третьем подтверждении вернуть '+W40;
+      act='держать '+W20+'; при третьем подтверждении перейти на '+W40;
     }else{                                               // сниженная доля удерживается отклонением
       label='Цена далеко ушла от SMA200 — доля снижена';
       ind=[`${rel} — при пороге 20%`,
            `возврат к базовой доле при 12% и ниже три закрытия подряд`];
-      act='держать сниженную долю';
+      act='держать '+W20;
     }
   }else if(m.state==='RISKON'){
     dist=W60;dot=DOT.acc;col=COL.acc;
@@ -398,12 +398,12 @@ function moduleView(m,ddFrac){
       label='Тренд ослабевает, доля скоро вернётся к базовой';
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — ниже порога +0,40%`,
            `снижение доли: <b>${m.co}</b> из 3 подтверждений`];
-      act='пока держать повышенную долю; при третьем подтверждении вернуть '+W40;
+      act='держать '+W60+'; при третьем подтверждении перейти на '+W40;
     }else{                                               // устойчивый восходящий тренд
       label='Устойчивый восходящий тренд — доля повышенная';
       ind=[`наклон EMA20 <b>${pc2(sl)}</b>, доля снизится при значении ниже +0,40%`,
            `${rel} — при пределе 20%`,`просадка в норме`];
-      act='ничего не делать';
+      act='держать '+W60;
     }
   }else{                                                 // базовая доля 40/60
     dist=W40;
@@ -412,23 +412,23 @@ function moduleView(m,ddFrac){
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — выше порога +0,90%`,
            `${rel} — выше нормы, повышение доли запрещено`,
            `запрет снимется при 18% и ниже`];
-      act='держать базовые доли';
+      act='держать '+W40;
     }else if(m.pending==='RISKON'&&m.ci>0){              // тренд усиливается → повышенная доля
       label='Тренд усиливается, копится сигнал на повышение доли';dot=DOT.acc;col=COL.acc;
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — выше порога +0,90%`,
            `переход к повышенной доле: <b>${m.ci}</b> из 5 подтверждений`,
            `${rel} — при пределе 20%`];
-      act='пока держать базовые доли; при пятом подтверждении повысить до '+W60;
+      act='держать '+W40+'; при пятом подтверждении перейти на '+W60;
     }else{                                               // тренда нет → базовая доля
       label='Тренда нет — доли базовые';dot=DOT.base;col=COL.base;
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — ниже порога +0,90%`,
            `${rel} — при пределе 20%`,`просадка в норме`];
-      act='ничего не делать';
+      act='держать '+W40;
     }
   }
   if(rebal)act=(wN>wP?`привести доли к ${dist}: продать часть QDTE, докупить TQQQ`
                      :`привести доли к ${dist}: продать часть TQQQ, докупить QDTE`);
-  return{label,dot,col,dist,ind,act};
+  return{label,dot,col,dist:'',ind,act};        // доли печатаются в «Действие», не в заголовке
 }
 
 /* сборка карточки состояния */
@@ -803,11 +803,10 @@ async function runAdvisor(){
 
     if(standard){
       /* уровни: ATH, текущий, жёлтый, выход */
-      const tqAthP=tqCur?tqCur*Math.pow(ath/cur,3):null;
+      const nowCls=dd<=DD.exit?'c-r':(dd<=DD.yellow?'c-y':'c-ok');
       $('tq-left').innerHTML=`<div class="lvls">`+
         `<div class="h"><span></span><span>${tqCur?'TQQQ (QQQ)':'QQQ'}</span></div>`+
-        `<div class="l"><span class="c-m">ATH</span><span>${priceRaw(tqAthP,ath)}</span></div>`+
-        `<div class="l"><span class="c-cur">сейчас ${pc1(dd)}</span><span>${priceRaw(tqCur,cur)}</span></div>`+
+        `<div class="l"><span class="${nowCls}">сейчас ${pc1(dd)}</span><span class="${nowCls}">${priceRaw(tqCur,cur)}</span></div>`+
         `<div class="l"><span class="c-y">−5,3% жёлтая зона</span><span>${priceCell('yellow',L.yellow)}</span></div>`+
         `<div class="l"><span class="c-r">−11,2% выход</span><span>${priceCell('exit',L.exit)}</span></div>`+
         `</div>`;
@@ -817,9 +816,8 @@ async function runAdvisor(){
       if(preExit){
         $('tq-right').innerHTML=scard({label:'Возможен выход в понедельник',dot:'var(--warn-dot)',col:'var(--warn)',dist:'',
           ind:[`QQQ <b>${fmt(curW)}</b> — ниже уровня выхода <b>${fmt(tqCore.ath*(1+CORE.EXIT))}</b>`,
-               `решение принимается только по закрытию пятницы, сигнала пока нет`,
-               `если неделя закроется ниже — продать TQQQ и QDTE, деньги в SGOV, разделить 60/40`],
-          act:'дождаться закрытия недели, сделок сейчас нет'});
+               `решение принимается только по закрытию пятницы, сигнала пока нет`],
+          act:'сейчас сделок нет; если пятница закроется ниже — в понедельник продать TQQQ и QDTE, деньги в SGOV, разделить 60/40'});
       }else{
         $('tq-right').innerHTML=scard(moduleView(mod,ddFrac));
       }
@@ -830,13 +828,14 @@ async function runAdvisor(){
          сработавшие транши помечены — они одноразовы и отскоком не отменяются. */
       const RG=[['t1','−20,6% транш 1',0],['t2','−29,5% транш 2',1],['t3','−41,5% транш 3',2]];
       const tqAtPx=px=>tqCur?tqCur*Math.pow(px/cur,3):null;
+      const nowCls=dd<=DD.exit?'c-r':(dd<=DD.yellow?'c-y':'c-ok');
       let rows=`<div class="h"><span></span><span>${tqCur?'TQQQ (QQQ)':'QQQ'}</span></div>`+
-        `<div class="l"><span class="c-cur">сейчас ${pc1(dd)}</span><span>${priceRaw(tqCur,cur)}</span></div>`+
+        `<div class="l"><span class="${nowCls}">сейчас ${pc1(dd)}</span><span class="${nowCls}">${priceRaw(tqCur,cur)}</span></div>`+
         `<div class="l"><span class="c-r">−11,2% выход</span><span>${priceRaw(tqAtPx(tqCore.exitPx),tqCore.exitPx)}</span></div>`;
       for(const [k,lbl,j] of RG){
         const px=tqCore.rungPx[j], done=tqCore.fired[j];
-        rows+=`<div class="l"><span class="${done?'c-ok':'c-m'}">${done?'✓ ':''}${lbl}</span>`+
-              `<span class="${done?'c-ok':''}">${priceRaw(tqAtPx(px),px)}</span></div>`;
+        rows+=`<div class="l"><span class="c-m">${done?'✓ ':''}${lbl}${done?' — исполнен':''}</span>`+
+              `<span class="c-m">${priceRaw(tqAtPx(px),px)}</span></div>`;
       }
       $('tq-left').innerHTML=`<div class="lvls">${rows}</div>`;
 
@@ -852,10 +851,8 @@ async function runAdvisor(){
       let label,ind,act;
       if(tqCore.justExited){label='Выход исполнен';
         ind=[`неделя закрылась ниже −11,2% от максимума`,
-             `продать TQQQ и QDTE полностью, деньги — в SGOV`,
-             `разделить деньги: 60% портфеля — закупочный резерв TQQQ, 40% — резерв QDTE`,
-             `докупка тремя частями — 10 / 25 / 65 от закупочного резерва, первая лимитка на уровне QQQ ${fmt(tqCore.rungPx[0])}`];
-        act='выполнить продажу и выставить три лимитки';
+             `после продажи деньги делятся: 60% портфеля — закупочный резерв TQQQ, 40% — резерв QDTE`];
+        act=`продать TQQQ и QDTE полностью, деньги в SGOV; выставить три лимитки на покупку TQQQ по уровням QQQ ${fmt(tqCore.rungPx[0])} (10% резерва), ${fmt(tqCore.rungPx[1])} (25%), ${fmt(tqCore.rungPx[2])} (65%)`;
       }else if(okRe){label='Пора вернуть остаток в TQQQ';
         ind=[`закрытие <b>${fmt(curW)}</b> выше опорной цены ${refTxt}`+(weekDone?'':' · неделя ещё не закрыта'),
              `ADX ${adx.toFixed(1)} при пороге 25, CHOP ${chop.toFixed(1)} при пороге 45 — тренд подтверждён`];
@@ -874,9 +871,10 @@ async function runAdvisor(){
 
     /* ================= QDTE ================= */
     $('qd-nums').innerHTML=(qdCur?`QDTE <b>${fmt(qdCur)}</b> <span class="ref">(справочно)</span> · `:'')+`ADX ${adx.toFixed(1)} · CHOP ${chop.toFixed(1)}`;
+    const qdNowCls=dd<=DD.exit?'c-r':(dd<=DD.yellow?'c-y':'c-ok');
     $('qd-left').innerHTML=`<div class="lvls">`+
       `<div class="h"><span></span><span>QQQ</span></div>`+
-      `<div class="l"><span class="c-ok">норма выше</span><span class="c-ok">&gt;${fmt(L.yellow)}</span></div>`+
+      `<div class="l"><span class="${qdNowCls}">сейчас ${pc1(dd)}</span><span class="${qdNowCls}">${fmt(cur)}</span></div>`+
       `<div class="l"><span class="c-y">−5,3% жёлтая зона</span><span class="c-y">${fmt(L.yellow)}</span></div>`+
       `<div class="l"><span class="c-r">−11,2% выход</span><span class="c-r">${fmt(L.exit)}</span></div>`+
       `</div>`;
@@ -904,17 +902,15 @@ async function runAdvisor(){
       if(qs==='FULL'){
         label='Держать QDTE полностью';dot='var(--ok-dot)';col='var(--ok)';
         ind=[`TQQQ уже вышел, по QDTE решение принимается по закрытию недели`,
-             `при закрытии ниже −11,2% продать QDTE полностью, деньги — в SGOV, часть перевести в закупочный резерв TQQQ`];
-        act='держать позицию, выплаты — в SGOV';
+             `порог выхода — недельное закрытие ниже −11,2%`];
+        act='держать QDTE полностью, выплаты направлять в SGOV';
       }else{ // OUT
         const okBack=qdCore.outRef!==null&&curW>qdCore.outRef&&adx>25&&chop<45;
         dot='var(--red-dot)';col='var(--red)';
         if(qdCore.justOut){
           label='Выход QDTE исполнен';
-          ind=[`неделя закрылась ниже −11,2% от максимума`,
-               `продать QDTE полностью, деньги — в SGOV`,
-               `20% портфеля перевести в закупочный резерв TQQQ: резерв TQQQ 60%, резерв QDTE 40%`];
-          act='выполнить перевод, 40% портфеля держать в SGOV до возврата';
+          ind=[`неделя закрылась ниже −11,2% от максимума`];
+          act='продать QDTE полностью, деньги в SGOV; 20% портфеля перевести в закупочный резерв TQQQ — резерв TQQQ 60%, резерв QDTE 40%';
         }else if(okBack){
           label='Пора вернуть QDTE в позицию';
           ind=[`закрытие <b>${fmt(curW)}</b> выше уровня −11,2% (<b>${fmt(qdCore.outRef)}</b>)`+(weekDone?'':' · неделя ещё не закрыта'),
@@ -925,7 +921,7 @@ async function runAdvisor(){
           ind=[`в SGOV 40% портфеля`,
                `возврат одной сделкой при закрытии выше ${qdCore.outRef?fmt(qdCore.outRef):'—'} с ADX выше 25 и CHOP ниже 45`,
                `сейчас закрытие <b>${fmt(curW)}</b>, ADX ${adx.toFixed(1)}, CHOP ${chop.toFixed(1)}`];
-          act='ничего не делать';
+          act='ничего не делать, держать резерв в SGOV';
         }
       }
       $('qd-right').innerHTML=scard({label,dot,col,dist:'',ind,act});
@@ -947,7 +943,7 @@ async function runAdvisor(){
         `<div class="health-cells">`+
         `<div class="hc"><div class="n">$${lastD.toFixed(4)}</div><div class="c">последняя выплата</div></div>`+
         `<div class="hc"><div class="n">$${avg.toFixed(4)}</div><div class="c">средняя за ${prev.length||1}</div></div>`+
-        `<div class="hc"><div class="n" style="color:${delta<=-25?'var(--red)':'var(--ok)'}">${delta>=0?'+':''}${delta.toFixed(1)}%</div><div class="c">отклонение</div></div>`+
+        `<div class="hc"><div class="n" style="color:${delta>=0?'var(--ok)':'var(--red)'}">${delta>=0?'+':''}${delta.toFixed(1)}%</div></div>`+
         `</div><div style="font-size:.8rem;color:var(--muted);margin-top:11px">Разовое снижение выплаты обычно связано с падением волатильности. Внимания требует устойчивое снижение больше 25% к средней вместе с падающей ценой пая. Порог −25% выбран экспертно, статистикой фонда не подтверждён.</div>`;
     }else{
       hHtml=`<div class="health-head"><span class="t">Выплаты QDTE · динамика</span><span class="badge bs-warn"><span class="dot"></span>нет данных</span></div>`+

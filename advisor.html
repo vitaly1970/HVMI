@@ -797,7 +797,7 @@ async function runAdvisor(){
       : `<div class="regime crisis"><div class="t">Кризисный режим: сигналы тренда не действуют</div><div class="s">Оба компонента в SGOV. Деньги разделены: 60% портфеля — закупочный резерв TQQQ, он вводится тремя лимитками; 40% ждут возврата QDTE одной сделкой.</div></div>`;
 
     /* ================= TQQQ ================= */
-    $('tq-nums').innerHTML=`QQQ <b>${fmt(cur)}</b>`+(tqCur?` · TQQQ <b>${fmt(tqCur)}</b>`:'');
+    $('tq-nums').innerHTML=`QQQ <b>${fmt(cur)}</b> <span class="ref">(ATH ${fmt(ath)})</span>`+(tqCur?` · TQQQ <b>${fmt(tqCur)}</b>`:'');
     const priceCell=(k,q)=>{const tq=tqAt(k);return tq!=null?`${f1(tq)} <span class="paren">(${fmt(q)})</span>`:`${fmt(q)}`;};
     const priceRaw=(tqv,qv)=>tqv!=null?`${f1(tqv)} <span class="paren">(${fmt(qv)})</span>`:`${fmt(qv)}`;
 
@@ -870,7 +870,7 @@ async function runAdvisor(){
     }
 
     /* ================= QDTE ================= */
-    $('qd-nums').innerHTML=(qdCur?`QDTE <b>${fmt(qdCur)}</b> <span class="ref">(справочно)</span> · `:'')+`ADX ${adx.toFixed(1)} · CHOP ${chop.toFixed(1)}`;
+    $('qd-nums').innerHTML=`QQQ <b>${fmt(cur)}</b> <span class="ref">(ATH ${fmt(ath)})</span> · `+(qdCur?`QDTE <b>${fmt(qdCur)}</b> <span class="ref">(справочно)</span> · `:'')+`ADX ${adx.toFixed(1)} · CHOP ${chop.toFixed(1)}`;
     const qdNowCls=dd<=DD.exit?'c-r':(dd<=DD.yellow?'c-y':'c-ok');
     $('qd-left').innerHTML=`<div class="lvls">`+
       `<div class="h"><span></span><span>QQQ</span></div>`+

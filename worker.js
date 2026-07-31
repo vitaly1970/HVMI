@@ -79,6 +79,9 @@ const LS_API         = 'https://api.lemonsqueezy.com/v1/checkouts';
 const MAX_BODY       = 64 * 1024;    // предельный размер тела POST-запроса, с запасом на вебхук кассы
 const CANON_HOST     = 'www.hvmiresearch.com';   // единственный канонический хост; апекс переадресуется сюда
 
+const QA_GATE_OFF    = 1;    // ВРЕМЕННЫЙ ОБХОД ГЕЙТА ДЛЯ ПРОГОНА QA. 1 — включён, 0 — выключен.
+const QA_SID         = 1;    // id подписчика, от имени которого работает обход при QA_GATE_OFF = 1
+
 /* ------------------------------------------------------------------ */
 /* пути, которые наружу не отдаются, и заголовки безопасности          */
 /* ------------------------------------------------------------------ */
@@ -224,12 +227,10 @@ async function handleScheduled(event, env, ctx) {
  * либо { sid } — опознанный подписчик.
  */
 async function checkAccess(request, env, url) {
-  // ВРЕМЕННЫЙ ОБХОД ДЛЯ QA. Если в панели Cloudflare задана переменная
-  // QA_GATE_OFF = <id подписчика>, сессия не проверяется вовсе — все
-  // запросы идут от имени этого подписчика. Убрать переменную — обход
-  // выключен, повторный деплой не нужен.
-  const qaSid = Number(env.QA_GATE_OFF);
-  if (Number.isInteger(qaSid) && qaSid > 0) return { sid: qaSid };
+  // ВРЕМЕННЫЙ ОБХОД ДЛЯ QA. QA_GATE_OFF: 1 — сессия не проверяется вовсе,
+  // все запросы идут от имени подписчика QA_SID; 0 — обход выключен.
+  // Переключается правкой этой константы и повторной заливкой на GitHub.
+  if (QA_GATE_OFF) return { sid: QA_SID };
 
   const now   = unix();
   const token = readCookie(request, COOKIE_NAME);

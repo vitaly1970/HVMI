@@ -336,7 +336,7 @@ function compute(data, opt = {}) {
 
 
 // ================= ЗАГРУЗКА =================
-const PROXY = "/.netlify/functions/proxy?url=";      // тот же прокси, что у индикатора
+const PROXY = "/api/proxy?url=";      // тот же прокси, что у индикатора
 const FALLBACK = ["https://api.allorigins.win/raw?url=",
                   "https://api.codetabs.com/v1/proxy?quest="];
 async function fetchJson(url, log) {
@@ -385,7 +385,7 @@ async function run() {
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 30000);
-    const r = await fetch("/.netlify/functions/cboe?symbol=" + encodeURIComponent(sym),
+    const r = await fetch("/api/cboe?symbol=" + encodeURIComponent(sym),
                           {cache: "no-store", signal: ctl.signal});
     clearTimeout(timer);
     if (!r.ok) {

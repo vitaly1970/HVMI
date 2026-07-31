@@ -306,7 +306,7 @@ function alignFFill(baseT, s, limit) {
 
 // ================= ЗАГРУЗКА (таймауты, прокси-фолбэки, живой лог) =================
 const ROUTES = [
-  [u => "/.netlify/functions/proxy?url=" + encodeURIComponent(u), 26000, "свой прокси"],
+  [u => "/api/proxy?url=" + encodeURIComponent(u), 26000, "свой прокси"],
   [u => u, 6000, "напрямую"],
   [u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u), 30000, "allorigins"],
   [u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u), 20000, "codetabs"],

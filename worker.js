@@ -396,9 +396,9 @@ async function serveFile(request, env, url, sid, slug) {
 /* запросы данных для страниц зоны                                     */
 /* ------------------------------------------------------------------ */
 
-/** /app/api/me · /app/api/issues · /app/api/issue · /app/api/payments · /app/api/renew */
+/** /app/api/me · issues · issue · payments · renew · notify · logout · email-code · email-confirm */
 function apiName(url) {
-  const m = url.pathname.match(/^\/app\/api\/(me|issues|issue|payments|renew)\/?$/);
+  const m = url.pathname.match(/^\/app\/api\/(me|issues|issue|payments|renew|notify|logout|email-code|email-confirm)\/?$/);
   return m ? m[1] : null;
 }
 
@@ -415,12 +415,21 @@ async function serveApi(request, env, url, sid, name) {
   }
 }
 
+const POST_ONLY = ['renew', 'notify', 'logout', 'email-code', 'email-confirm'];
+
 async function serveApiInner(request, env, url, sid, name) {
-  if (name === 'renew') {
+  if (POST_ONLY.includes(name)) {
     if (request.method !== 'POST') return json({ ok: false, error: 'Только POST.' }, 405);
+
+    if (name === 'logout') return apiLogout(request, env);
+
     const body = await safeJson(request);
     if (body === null) return json({ ok: false, error: 'Запрос слишком велик.' }, 413);
-    return apiRenew(body, env, sid);
+
+    if (name === 'renew')         return apiRenew(body, env, sid);
+    if (name === 'notify')        return apiNotify(body, env, sid);
+    if (name === 'email-code')    return apiEmailCode(body, env, sid);
+    if (name === 'email-confirm') return apiEmailConfirm(body, env, sid);
   }
 
   if (request.method !== 'GET') return json({ ok: false, error: 'Только GET.' }, 405);
@@ -629,6 +638,125 @@ async function apiPayments(env, sid) {
     .all();
 
   return json({ ok: true, payments: rows.results || [] });
+}
+
+/** Адрес для рассылки выпусков — отдельно от адреса входа. Пустое значение возвращает к адресу входа. */
+async function apiNotify(body, env, sid) {
+  const raw = String((body && body.deliver_email) || '').trim();
+  let value = null;
+  if (raw) {
+    value = normalizeEmail(raw);
+    if (!value) return json({ ok: false, error: 'Проверьте адрес — он выглядит неверно.' }, 400);
+  }
+
+  await env.DB.prepare('UPDATE subscriber SET deliver_email = ?2 WHERE id = ?1').bind(sid, value).run();
+  return json({ ok: true, deliver_email: value });
+}
+
+/** Выход: гасим текущую сессию по её токену из куки и чистим куку в ответе. */
+async function apiLogout(request, env) {
+  const token = readCookie(request, COOKIE_NAME);
+  if (token) {
+    await env.DB
+      .prepare('UPDATE session SET revoked_at = ?2 WHERE id = ?1')
+      .bind(await hashWith(token, env.AUTH_SECRET), unix())
+      .run();
+  }
+  return json({ ok: true }, 200, {
+    'Set-Cookie': `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* смена почты входа: код на новый адрес, затем подтверждение          */
+/* Переиспользует таблицу login_code (та же, что и вход по коду) —     */
+/* purpose различает назначение, subscriber_id привязывает к заявителю */
+/* (для входа email code уже несёт личность, для смены — нет, новый    */
+/* адрес ещё не принадлежит никакому подписчику).                      */
+/* ------------------------------------------------------------------ */
+
+async function ensureEmailChangeColumns(env) {
+  try { await env.DB.prepare("ALTER TABLE login_code ADD COLUMN purpose TEXT DEFAULT 'login'").run(); } catch (e) {}
+  try { await env.DB.prepare('ALTER TABLE login_code ADD COLUMN subscriber_id INTEGER').run(); } catch (e) {}
+}
+
+async function apiEmailCode(body, env, sid) {
+  await ensureEmailChangeColumns(env);
+
+  const email = normalizeEmail(body && body.new_email);
+  if (!email) return json({ ok: false, error: 'Проверьте новый адрес почты.' }, 400);
+
+  const now = unix();
+
+  const taken = await env.DB
+    .prepare('SELECT id FROM subscriber WHERE email = ?1 AND id != ?2')
+    .bind(email, sid)
+    .first();
+  if (taken) return json({ ok: false, error: 'Эта почта уже используется другой подпиской.' }, 409);
+
+  const recent = await env.DB
+    .prepare(`SELECT COUNT(*) AS n FROM login_code
+              WHERE subscriber_id = ?1 AND purpose = 'email_change' AND created_at > ?2`)
+    .bind(sid, now - CODE_TTL)
+    .first();
+  if (recent && recent.n >= MAX_REQUESTS) return json({ ok: true });   // тот же приём, что и у входа
+
+  const code = randomCode();
+  const hash = await hashWith(code, env.AUTH_SECRET);
+
+  await env.DB
+    .prepare(`INSERT INTO login_code (email, code_hash, created_at, expires_at, request_ip, purpose, subscriber_id)
+              VALUES (?1, ?2, ?3, ?4, '', 'email_change', ?5)`)
+    .bind(email, hash, now, now + CODE_TTL, sid)
+    .run();
+
+  const sent = await sendCode(env, email, code, true);
+  if (!sent) return json({ ok: false, error: 'Письмо не удалось отправить. Попробуйте ещё раз.' }, 502);
+
+  return json({ ok: true });
+}
+
+async function apiEmailConfirm(body, env, sid) {
+  await ensureEmailChangeColumns(env);
+
+  const code  = String((body && body.code) || '').replace(/\s/g, '');
+  const WRONG = 'Код не подошёл. Он действует 15 минут и только один раз — запросите новый.';
+  if (!/^\d{6}$/.test(code)) return json({ ok: false, error: 'Код состоит из шести цифр.' }, 400);
+
+  const now = unix();
+
+  const row = await env.DB
+    .prepare(`SELECT id, email, code_hash, attempts, expires_at FROM login_code
+              WHERE subscriber_id = ?1 AND purpose = 'email_change' AND used_at IS NULL
+              ORDER BY created_at DESC LIMIT 1`)
+    .bind(sid)
+    .first();
+
+  if (!row || row.expires_at <= now) return json({ ok: false, error: WRONG }, 401);
+
+  if (row.attempts >= MAX_ATTEMPTS) {
+    await env.DB.prepare('UPDATE login_code SET used_at = ?2 WHERE id = ?1').bind(row.id, now).run();
+    return json({ ok: false, error: 'Слишком много попыток. Запросите новый код.' }, 429);
+  }
+
+  await env.DB.prepare('UPDATE login_code SET attempts = attempts + 1 WHERE id = ?1').bind(row.id).run();
+
+  const hash = await hashWith(code, env.AUTH_SECRET);
+  if (!equalHex(hash, row.code_hash)) return json({ ok: false, error: WRONG }, 401);
+
+  // подстраховка от гонки: адрес мог занять кто-то другой между запросом кода и подтверждением
+  const taken = await env.DB
+    .prepare('SELECT id FROM subscriber WHERE email = ?1 AND id != ?2')
+    .bind(row.email, sid)
+    .first();
+  if (taken) return json({ ok: false, error: 'Эта почта уже используется другой подпиской.' }, 409);
+
+  await env.DB.batch([
+    env.DB.prepare('UPDATE login_code SET used_at = ?2 WHERE id = ?1').bind(row.id, now),
+    env.DB.prepare('UPDATE subscriber SET email = ?2 WHERE id = ?1').bind(sid, row.email)
+  ]);
+
+  return json({ ok: true, email: row.email });
 }
 
 /** Пустая строка в отборе — это «не задано», а не «пусто». */
@@ -1223,7 +1351,7 @@ async function notifyIssue(env, slug, code, spec) {
     .bind(code, now)
     .all();
 
-  const link = `${SITE_ORIGIN}/app/issue/${slug}`;
+  const link = `${SITE_ORIGIN}/app/issue.html?slug=${encodeURIComponent(slug)}`;
   for (const r of (rows.results || [])) {
     await sendIssueMail(env, r.addr, spec.title, link);
     await pause(600);   // Resend принимает не больше двух писем в секунду
@@ -1283,20 +1411,27 @@ function pause(ms) { return new Promise(r => setTimeout(r, ms)); }
 /* письмо через Resend                                                 */
 /* ------------------------------------------------------------------ */
 
-async function sendCode(env, email, code) {
+async function sendCode(env, email, code, isChange) {
+  const purpose = isChange ? 'подтверждения новой почты' : 'входа';
+  const subject = isChange ? 'Код для подтверждения почты — Helicopter View' : 'Код для входа — Helicopter View';
+
   const text =
-    `Код для входа: ${code}\n\n` +
-    'Введите его на странице входа. Код действует 15 минут и работает один раз.\n\n' +
-    'Если вход запрашивали не вы, письмо можно не открывать — без кода доступ не откроется.\n\n' +
+    `Код для ${purpose}: ${code}\n\n` +
+    (isChange
+      ? 'Введите его в разделе «Профиль → Настройки безопасности». Код действует 15 минут и работает один раз.\n\n'
+      : 'Введите его на странице входа. Код действует 15 минут и работает один раз.\n\n') +
+    'Если это запрашивали не вы, письмо можно не открывать — без кода ничего не изменится.\n\n' +
     'Helicopter View Market Intelligence';
 
   const html =
     '<div style="font-family:Manrope,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#1a1a1a">' +
-      '<p style="margin:0 0 18px">Код для входа в Helicopter View:</p>' +
+      `<p style="margin:0 0 18px">Код для ${purpose} в Helicopter View:</p>` +
       `<p style="margin:0 0 18px;font-size:28px;letter-spacing:.3em;font-weight:600">${code}</p>` +
-      '<p style="margin:0 0 18px">Введите его на странице входа. Код действует 15 минут и работает один раз.</p>' +
-      '<p style="margin:0 0 24px;color:#767676">Если вход запрашивали не вы, письмо можно не открывать — ' +
-        'без кода доступ не откроется.</p>' +
+      '<p style="margin:0 0 18px">' + (isChange
+        ? 'Введите его в разделе «Профиль → Настройки безопасности».'
+        : 'Введите его на странице входа.') + ' Код действует 15 минут и работает один раз.</p>' +
+      '<p style="margin:0 0 24px;color:#767676">Если это запрашивали не вы, письмо можно не открывать — ' +
+        'без кода ничего не изменится.</p>' +
       '<p style="margin:0;font-size:11px;color:#767676">Helicopter View Market Intelligence</p>' +
     '</div>';
 
@@ -1304,7 +1439,7 @@ async function sendCode(env, email, code) {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: env.MAIL_FROM, to: [email], subject: 'Код для входа — Helicopter View', text, html })
+      body: JSON.stringify({ from: env.MAIL_FROM, to: [email], subject, text, html })
     });
     return res.ok;
   } catch (e) {

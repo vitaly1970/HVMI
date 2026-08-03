@@ -227,8 +227,8 @@ const MULT={yellow:0.95,exit:0.90,t1:0.794,t2:0.705,t3:0.585};
 const DD={yellow:-5,exit:-10,t1:-20.6,t2:-29.5,t3:-41.5};
 
 /* параметры модуля аллокации (порт из бэктеста v2.2) */
-const MOD={ENTER:0.009,EXIT:0.004,CIN:5,COUT:3,DOX:0.20,DREL:0.18,DRET:0.12,CRET:3,YEL:-0.05,RED:-0.10,SW:10};
-const W20='TQQQ 20% / QDTE 80%';      // разгрузка (растяжение)
+const MOD={ENTER:0.009,EXIT:0.004,CIN:5,COUT:3,SCON:2.5,SCOFF:2.0,YEL:-0.05,RED:-0.10,SW:10};
+const W20='TQQQ 20% / QDTE 80%';      // сниженная доля (перегрев)
 const W40='TQQQ 40% / QDTE 60%';      // база
 const W60='TQQQ 60% / QDTE 40%';      // разгон
 
@@ -298,35 +298,75 @@ function weeklyCloses(rows){const wk=[];let cur=null,last=null;
     if(key!==cur){if(last)wk.push(last);cur=key;}last={key,c:r.c,d:r.d,i};}
   if(last)wk.push(last);return wk;}
 
-/* ---- МАШИНА СОСТОЯНИЙ МОДУЛЯ (порт run_module из бэктеста + разгрузка v2.2) ----
+/* ---- СВОДНЫЙ ПОКАЗАТЕЛЬ ПЕРЕГРЕВА ----
+   Среднее трёх компонентов по дневным закрытиям QQQ, всё каузально:
+   (1) (цена − SMA200) / скользящее СКО цены за 200 дней;
+   (2) ROC60 / собственное скользящее СКО за 756 дней;
+   (3) недельный RSI(14) в шкале (RSI − 50)/10 — считается по закрытым неделям,
+       значение действует со следующего торгового дня после закрытия недели.
+   Блок сниженной доли: вход при ≥ +2,5σ, снятие при < +2,0σ (гистерезис). */
+function stdArr(a,n){const o=new Array(a.length).fill(NaN);let s=0,s2=0;
+  for(let i=0;i<a.length;i++){s+=a[i];s2+=a[i]*a[i];
+    if(i>=n){s-=a[i-n];s2-=a[i-n]*a[i-n];}
+    if(i>=n-1){const m=s/n,v=s2/n-m*m;o[i]=v>0?Math.sqrt(v):NaN;}}
+  return o;}
+function rsiWilder(a,n){const o=new Array(a.length).fill(NaN);
+  if(a.length<=n)return o;
+  let g=0,l=0;
+  for(let i=1;i<=n;i++){const d=a[i]-a[i-1];if(d>0)g+=d;else l-=d;}
+  g/=n;l/=n;o[n]=(l===0)?100:100-100/(1+g/l);
+  for(let i=n+1;i<a.length;i++){const d=a[i]-a[i-1];
+    g=(g*(n-1)+(d>0?d:0))/n;l=(l*(n-1)+(d<0?-d:0))/n;
+    o[i]=(l===0)?100:100-100/(1+g/l);}
+  return o;}
+function scoreArr(closes,sma200,rows){
+  const N=closes.length,std200=stdArr(closes,200);
+  const roc=new Array(N).fill(NaN);
+  for(let i=60;i<N;i++)roc[i]=closes[i]/closes[i-60]-1;
+  const rocStd=new Array(N).fill(NaN);
+  {const win=756;let s=0,s2=0,cnt=0;
+   for(let i=60;i<N;i++){const v=roc[i];s+=v;s2+=v*v;cnt++;
+     if(cnt>win){const u=roc[i-win];s-=u;s2-=u*u;cnt--;}
+     if(cnt>=win){const m=s/cnt,vv=s2/cnt-m*m;rocStd[i]=vv>0?Math.sqrt(vv):NaN;}}}
+  const wk=weeklyCloses(rows),wr=rsiWilder(wk.map(w=>w.c),14);
+  const wRsi=new Array(N).fill(NaN);
+  {let j=0,cur=NaN;
+   for(let i=0;i<N;i++){while(j<wk.length&&wk[j].i<i){cur=wr[j];j++;}wRsi[i]=cur;}}
+  const sc=new Array(N).fill(NaN);
+  for(let i=0;i<N;i++){
+    const z1=(std200[i]&&sma200[i])?(closes[i]-sma200[i])/std200[i]:NaN;
+    const z2=rocStd[i]?roc[i]/rocStd[i]:NaN;
+    const z3=isNaN(wRsi[i])?NaN:(wRsi[i]-50)/10;
+    sc[i]=(isNaN(z1)||isNaN(z2)||isNaN(z3))?NaN:(z1+z2+z3)/3;}
+  return sc;}
+
+/* ---- МАШИНА СОСТОЯНИЙ МОДУЛЯ (порт run_module из бэктеста + блок перегрева по баллу) ----
    Прогон по дневным закрытиям QQQ. Три аллокационных состояния:
-     RISKOFF = 20/80 (растяжение), BASE = 40/60 (по умолчанию), RISKON = 60/40 (тренд).
-   Переходы: D≥20% → RISKOFF немедленно (из любого состояния); RISKOFF→BASE при D<12%
-   три закрытия подряд; латч растяжения (20/18) блокирует вход в разгон; наклон EMA20
+     RISKOFF = 20/80 (перегрев), BASE = 40/60 (по умолчанию), RISKON = 60/40 (тренд).
+   Переходы: сводный показатель ≥ 2,5σ → латч перегрева и RISKOFF немедленно
+   (из любого состояния); латч снимается при < 2,0σ — RISKOFF возвращается в BASE;
+   пока латч горит, вход в повышенную долю заблокирован; наклон EMA20
    двигает BASE↔RISKON (подтверждения 5/3). Красный/жёлтый в приоритете.
    Вес — чистая функция state: RISKOFF 20, BASE 40, RISKON 60. */
-function runModule(closes,ema20,sma200){
-  const N=closes.length,{ENTER,EXIT,CIN,COUT,DOX,DREL,DRET,CRET,YEL,RED,SW}=MOD;
-  let state='BASE',ci=0,co=0,cr=0,pending=null,overext=false,ath=-Infinity,prev='BASE';
+function runModule(closes,ema20,score){
+  const N=closes.length,{ENTER,EXIT,CIN,COUT,SCON,SCOFF,YEL,RED,SW}=MOD;
+  let state='BASE',ci=0,co=0,pending=null,overext=false,ath=-Infinity,prev='BASE';
   let out=null;
   const ev=[],wOf=x=>({RISKOFF:20,BASE:40,RISKON:60,CORE_OFF:40})[x]||40;
   for(let i=0;i<N;i++){
     ath=Math.max(ath,closes[i]);
     const dd=closes[i]/ath-1;
     const slope=(i>=SW&&ema20[i-SW])?ema20[i]/ema20[i-SW]-1:NaN;
-    const D=sma200[i]?closes[i]/sma200[i]-1:NaN;
-    if(!isNaN(D)){if(D>=DOX)overext=true;else if(D<DREL)overext=false;}
+    const sc=score[i];
+    if(!isNaN(sc)){if(sc>=SCON)overext=true;else if(sc<SCOFF)overext=false;}
     prev=state;
     let ns;
-    if(dd<=RED){ns='CORE_OFF';ci=co=cr=0;pending=null;}
-    else if(dd<=YEL){ns='BASE';ci=co=cr=0;pending=null;}                 // жёлтый → база
-    else if(!isNaN(D)&&D>=DOX){ns='RISKOFF';ci=co=cr=0;pending=null;}     // растяжение → разгрузка
+    if(dd<=RED){ns='CORE_OFF';ci=co=0;pending=null;}
+    else if(dd<=YEL){ns='BASE';ci=co=0;pending=null;}                 // жёлтый → база
+    else if(overext){ns='RISKOFF';ci=co=0;pending=null;}              // перегрев по баллу → сниженная доля
     else{
-      ns=(state==='CORE_OFF')?'BASE':state;
-      if(ns==='RISKOFF'){                                                // выход из разгрузки: D<12% ×3
-        if(!isNaN(D)&&D<DRET){cr++;if(cr>=CRET){ns='BASE';cr=0;}}
-        else cr=0;
-      }else if(ns==='BASE'){
+      ns=(state==='CORE_OFF'||state==='RISKOFF')?'BASE':state;        // латч снят → базовая доля немедленно
+      if(ns==='BASE'){
         const want=(!isNaN(slope)&&slope>ENTER&&!overext)?'RISKON':null;
         if(want&&want===pending)ci++;
         else if(want){pending=want;ci=1;}
@@ -339,25 +379,26 @@ function runModule(closes,ema20,sma200){
     }
     if(wOf(ns)!==wOf(prev)) ev.push({i,state:ns,prev});
     state=ns;
-    out={state,prev,ci,co,cr,pending,slope,D,dd,overext};
+    out={state,prev,ci,co,pending,slope,sc,dd,overext};
   }
   return{...out,ev};
 }
 
 /* ---- ВИД КАРТОЧКИ МОДУЛЯ (стандартный режим) ----
-   Приоритет: жёлтая зона → отклонение от SMA200 → фаза тренда.
+   Приоритет: жёлтая зона → перегрев по сводному показателю → фаза тренда.
    ddFrac — живая просадка (доля), m — состояние последнего бара.
    Регистр профессиональный; долю показываем в заголовке, «Действие:»
    её не дублирует (в покое — «доля без изменений»). */
 function moduleView(m,ddFrac){
-  const sl=m.slope*100, D=m.D*100;
+  const sl=m.slope*100;
   const DOT={acc:'var(--acc)',base:'var(--sec)',warn:'var(--warn-dot)',ok:'var(--ok-dot)'};
   const COL={acc:'var(--acc)',base:'var(--sec)',warn:'var(--warn)',ok:'var(--ok)'};
   const wOf=s=>({RISKOFF:20,BASE:40,RISKON:60,CORE_OFF:40})[s]||40;
   const wN=wOf(m.state), wP=wOf(m.prev);
   const rebal=wN!==wP;                                  // доля изменилась на этом баре → прямое указание
-  const rel=(D>=0?`цена выше SMA200 на <b>${D.toFixed(1)}%</b>`
-                 :`цена ниже SMA200 на <b>${Math.abs(D).toFixed(1)}%</b>`);
+  const sg=x=>(x>=0?'+':'−')+Math.abs(x).toFixed(2);
+  const scLine=isNaN(m.sc)?'сводный показатель перегрева: недостаточно истории'
+                          :`сводный показатель перегрева <b>${sg(m.sc)} σ</b>`;
   let label,dot,col,dist,ind,act;
 
   if(ddFrac<=MOD.YEL){                                   // жёлтая зона → базовая доля 40/60
@@ -367,17 +408,10 @@ function moduleView(m,ddFrac){
     act='держать '+W40;
   }else if(m.state==='RISKOFF'){                         // сниженная доля 20/80
     dist=W20;dot=DOT.warn;col=COL.warn;
-    if(m.cr>0){                                          // отклонение снижается → базовая доля
-      label='Отклонение спадает, доля скоро вернётся к базовой';
-      ind=[`${rel} — ниже порога 12%`,
-           `возврат к базовой доле: <b>${m.cr}</b> из 3 подтверждений`];
-      act='держать '+W20+'; при третьем подтверждении перейти на '+W40;
-    }else{                                               // сниженная доля удерживается отклонением
-      label='Цена далеко ушла от SMA200 — доля снижена';
-      ind=[`${rel} — при пороге 20%`,
-           `возврат к базовой доле при 12% и ниже три закрытия подряд`];
-      act='держать '+W20;
-    }
+    label='Рынок перегрет по сводному показателю — доля снижена';
+    ind=[`${scLine} — блок включён на пороге 2,5σ`,
+         `возврат к базовой доле при значении ниже 2,0σ`];
+    act='держать '+W20;
   }else if(m.state==='RISKON'){
     dist=W60;dot=DOT.acc;col=COL.acc;
     if(m.co>0){                                          // тренд ослабевает → базовая доля
@@ -388,27 +422,21 @@ function moduleView(m,ddFrac){
     }else{                                               // устойчивый восходящий тренд
       label='Устойчивый восходящий тренд — доля повышенная';
       ind=[`наклон EMA20 <b>${pc2(sl)}</b>, доля снизится при значении ниже +0,40%`,
-           `${rel} — при пределе 20%`,`просадка в норме`];
+           `${scLine} — при пороге блока 2,5σ`,`просадка в норме`];
       act='держать '+W60;
     }
   }else{                                                 // базовая доля 40/60
     dist=W40;
-    if(m.overext&&!isNaN(m.slope)&&m.slope>MOD.ENTER){   // повышение доли заблокировано отклонением (D в 18–20%)
-      label='Тренд есть, но цена слишком дорога для повышения доли';dot=DOT.warn;col=COL.warn;
-      ind=[`наклон EMA20 <b>${pc2(sl)}</b> — выше порога +0,90%`,
-           `${rel} — выше нормы, повышение доли запрещено`,
-           `запрет снимется при 18% и ниже`];
-      act='держать '+W40;
-    }else if(m.pending==='RISKON'&&m.ci>0){              // тренд усиливается → повышенная доля
+    if(m.pending==='RISKON'&&m.ci>0){                    // тренд усиливается → повышенная доля
       label='Тренд усиливается, копится сигнал на повышение доли';dot=DOT.acc;col=COL.acc;
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — выше порога +0,90%`,
            `переход к повышенной доле: <b>${m.ci}</b> из 5 подтверждений`,
-           `${rel} — при пределе 20%`];
+           `${scLine} — при пороге блока 2,5σ`];
       act='держать '+W40+'; при пятом подтверждении перейти на '+W60;
     }else{                                               // тренда нет → базовая доля
       label='Тренда нет — доли базовые';dot=DOT.base;col=COL.base;
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — ниже порога +0,90%`,
-           `${rel} — при пределе 20%`,`просадка в норме`];
+           `${scLine} — при пороге блока 2,5σ`,`просадка в норме`];
       act='держать '+W40;
     }
   }
@@ -706,8 +734,9 @@ async function runAdvisor(){
     const closes=q.map(r=>r.c);
     const ema20=ewm(closes,2/21);          // span 20 → alpha 2/21 (как ewm(span=20) в бэктесте)
     const sma200=smaArr(closes,200);
+    const score=scoreArr(closes,sma200,q);
     const athArr=cummax(closes);
-    const mod=runModule(closes,ema20,sma200);
+    const mod=runModule(closes,ema20,score);
 
     /* недельный сигнал */
     const wk=weeklyCloses(q);
@@ -760,7 +789,7 @@ async function runAdvisor(){
 
     /* плашка режима (информационная — режим определяется автоматически) */
     $('regime').innerHTML=standard
-      ? `<div class="regime"><div class="t">Обычный режим: доли меняются по тренду</div><div class="s">Доля TQQQ — 60% при устойчивом восходящем тренде, 40% в обычных условиях, 20% при значительном отклонении цены от SMA200. Оба компонента остаются в позиции, пока просадка QQQ мельче −10%.</div></div>`
+      ? `<div class="regime"><div class="t">Обычный режим: доли меняются по тренду</div><div class="s">Доля TQQQ — 60% при устойчивом восходящем тренде, 40% в обычных условиях, 20% при перегреве рынка по сводному показателю. Оба компонента остаются в позиции, пока просадка QQQ мельче −10%.</div></div>`
       : `<div class="regime crisis"><div class="t">Кризисный режим: сигналы тренда не действуют</div><div class="s">Оба компонента в SGOV. Деньги разделены: 60% портфеля — закупочный резерв TQQQ, он вводится тремя лимитками; 40% ждут возврата QDTE одной сделкой.</div></div>`;
 
     /* ================= TQQQ ================= */
@@ -789,7 +818,7 @@ async function runAdvisor(){
         $('tq-right').innerHTML=scard(moduleView(mod,ddFrac));
       }
       $('tq-hint').style.display='';
-      $('tq-hint').textContent='Наклон EMA20 и положение цены относительно SMA200 считаются по дневным закрытиям QQQ. Выход и возврат срабатывают только по закрытию недели; лимитки на докупку — по касанию цены в любой день.';
+      $('tq-hint').textContent='Наклон EMA20 и сводный показатель перегрева считаются по дневным закрытиям QQQ. Выход и возврат срабатывают только по закрытию недели; лимитки на докупку — по касанию цены в любой день.';
     }else{
       /* кризис: лестница ядра. Цены лимиток ЗАФИКСИРОВАНЫ в момент выхода (I-6),
          сработавшие транши помечены — они одноразовы и отскоком не отменяются. */

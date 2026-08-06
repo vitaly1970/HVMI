@@ -24,11 +24,11 @@
   --green:#7FBA00; --green-ink:#457E00;
   --ok:#457E00; --ok-dot:#7FBA00;
   --warn:#8A6D00; --warn-dot:#F0B400;
-  --red:#C0391A; --red-bg:#FBF1EF;
+  --orange:#E8760C; --red:#C0391A; --red-bg:#FBF1EF;
   --marker:#00709F;
 
-  /* цвета углов карты — по принятому эскизу (палитра логотипа Microsoft) */
-  --q-tl:#F25022; --q-tr:#7FBA00; --q-bl:#00A4EF; --q-br:#FFB900;
+  /* цвета углов карты — сняты с присланного эскиза (объёмная диаграмма) */
+  --q-tl:#E37F35; --q-tr:#99C16C; --q-bl:#1B8EF0; --q-br:#DBD739;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:#fff}
@@ -125,9 +125,9 @@ h1{font-size:var(--fs-display);font-weight:var(--fw-display);letter-spacing:.01e
 .tm input[type=range]:focus-visible::-webkit-slider-thumb{outline:3px solid var(--yellow)}
 .tm .tmdate{font-family:var(--monof);font-size:var(--fs-body);
   font-weight:var(--fw-mono-em);min-width:88px;text-align:right;font-variant-numeric:tabular-nums}
-.tm input.tmdate{border:1px solid var(--line);background:transparent;color:var(--ink);
-  padding:5px 8px;text-align:left;border-radius:0}
-.tm input.tmdate:focus-visible{outline:3px solid var(--yellow)}
+.tm .tmsel{font-family:var(--monof);font-size:var(--fs-body);color:var(--ink);
+  border:1px solid var(--line);background:transparent;padding:6px 8px;border-radius:0}
+.tm .tmsel:focus-visible{outline:3px solid var(--yellow)}
 button{font-family:var(--sans);font-size:var(--fs-body);font-weight:var(--fw-bold);
   padding:6px 16px;border:1px solid var(--green-ink);
   background:transparent;color:var(--green-ink);cursor:pointer}
@@ -150,7 +150,14 @@ td.tick{font-weight:var(--fw-mono-em)}
 td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .qcell{display:inline-flex;align-items:center;gap:8px}
 .qbar{width:64px;height:6px;background:var(--rule);position:relative;flex:none}
-.qbar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink)}
+.qbar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink2)}
+/* Цвет полоски — по итоговому рейтингу: длина говорит о качестве компании,
+   цвет — о качестве покупки по сегодняшней цене. */
+.qbar i.b0{background:var(--green-ink)}
+.qbar i.b1{background:var(--green)}
+.qbar i.b2{background:var(--yellow)}
+.qbar i.b3{background:var(--orange)}
+.qbar i.b4{background:var(--red)}
 .grades span{display:inline-block;min-width:20px}
 .r-sb,.r-b{color:var(--ok);font-weight:var(--fw-mono-em)}
 .r-h{color:var(--ink2)}
@@ -158,8 +165,15 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .qd{display:inline-flex;align-items:center;gap:6px}
 .qd i{width:8px;height:8px;flex:none}
 td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
+.sortbtn{font:inherit;color:inherit;background:transparent;border:0;padding:0;
+  cursor:pointer;letter-spacing:inherit;text-transform:inherit}
+.sortbtn:hover{color:var(--ink)}
+.sortbtn[aria-sort]{color:var(--ink);font-weight:var(--fw-bold)}
+.sortbtn[aria-sort]::after{content:' ▲'}
+.sortbtn[aria-sort="desc"]::after{content:' ▼'}
 td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micro)}
 .tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
+.srcline{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:10px}
 .tbar{display:flex;align-items:center;gap:12px;margin:10px 0 4px;flex-wrap:wrap}
 .qbox{font-family:var(--monof);font-size:var(--fs-body);color:var(--ink);
   border:1px solid var(--line);background:transparent;padding:7px 10px;min-width:280px;border-radius:0}
@@ -261,29 +275,29 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
     <span class="badge b-neut" id="w-pos-w"><span class="dot"></span>Crowding: <span id="w-pos">—</span></span>
     <span class="badge b-neut" id="w-buy-w"><span class="dot"></span>Opportunities: <span id="w-buy">—</span></span>
   </div>
-  <div class="phrase" id="w-phrase">—</div>
 </section>
 
 <section class="sec-time">
   <div class="wing-head">
-    <span class="wing-title">История оценок</span>
+    <span class="wing-title">История наших оценок</span>
     <span class="wing-nums">период · <b id="tmspan">—</b></span>
   </div>
   <div class="tm">
     <input type="range" id="tmr" min="0" max="0" step="1" value="0"
       aria-label="Дата снимка">
-    <input type="month" class="tmdate" id="tmpick" aria-label="Месяц снимка">
+    <select class="tmsel" id="tmM" aria-label="Месяц"></select>
+    <select class="tmsel" id="tmY" aria-label="Год"></select>
     <button id="tmnow" type="button">К текущей дате</button>
   </div>
-  <div class="tm-note">Карта, таблица и карточка пересчитываются на выбранную дату. В расчёт входят только данные, известные на эту дату.</div>
+  <div class="tm-note">Каждый месяц с августа 2018 года мы пересчитывали рейтинги заново — по тем данным, которые были известны на тот день, без единой цифры из будущего. Потяните ползунок влево, чтобы увидеть таблицу такой, какой она была тогда, или выберите месяц и год справа. Проверьте нас: посмотрите, что система говорила год назад, и сравните с тем, что случилось потом.</div>
 </section>
 
 <section class="sec-tbl" style="margin-top:30px">
   <div class="wing-head">
     <span class="wing-title">Оценки сделок</span>
-    <span class="wing-nums">сортировка · <b>по оценке сделки</b></span>
+    <span class="wing-nums">сортировка · <b>по тикеру</b></span>
   </div>
-  <div class="status" id="status">Загрузка данных…</div>
+  <div class="status" id="status" hidden></div>
   <div class="tbar">
     <input type="search" id="q" class="qbox" placeholder="Поиск по тикеру или названию" aria-label="Поиск по тикеру или названию">
     <span class="found" id="found"></span>
@@ -292,15 +306,20 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
     <table id="tbl">
       <thead>
         <tr>
-          <th>Тикер</th><th>Компания</th><th>Качество</th><th>Позиционирование</th>
+          <th><button type="button" class="sortbtn" data-k="tk">Тикер</button></th>
+          <th><button type="button" class="sortbtn" data-k="nm">Компания</button></th>
+          <th><button type="button" class="sortbtn" data-k="q">Качество сделки</button></th>
+          <th><button type="button" class="sortbtn" data-k="pos">Позиционирование</button></th>
           <th>V&nbsp;·&nbsp;G&nbsp;·&nbsp;P&nbsp;·&nbsp;M&nbsp;·&nbsp;E</th>
-          <th>Оценка сделки</th><th>Ограничение</th>
+          <th><button type="button" class="sortbtn" data-k="r">Рейтинг</button></th>
+          <th>Ограничение</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
   <nav class="pager" id="pager" aria-label="Страницы списка"></nav>
+  <div class="srcline" id="srcline">Цены Yahoo, отчётность EDGAR.</div>
   <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
 </section>
 
@@ -375,13 +394,6 @@ const QD = {
   tl:['Резерв','var(--q-tl)'], tr:['Ядро','var(--q-tr)'],
   bl:['Периферия','var(--q-bl)'], br:['Перегрев','var(--q-br)']
 };
-/* короткое описание угла — для сводки по списку */
-const QD_WHY = {
-  tl:'качество высокое, толпы в бумаге нет',
-  tr:'качество высокое, но участников уже много',
-  bl:'качество низкое, и внимания к бумаге нет',
-  br:'качество низкое, а участников много'
-};
 const WIN = 1260;          /* окно каузального перцентиля — пять лет */
 const DAY = 86400000;
 
@@ -392,7 +404,6 @@ const clamp = (x,a,b) => Math.min(b, Math.max(a, x));
 const fmt   = d => String(d.getDate()).padStart(2,'0')+'.'+
                    String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();
 const fmtM  = d => String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();
-const isoM  = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 const money = v => v >= 100 ? v.toFixed(0) : v.toFixed(2);
 
 function sma(a, n){
@@ -699,13 +710,16 @@ const DATA = {};
 let dates = [], cur = 0, sel = null;
 let IDX = null;          /* месяцы, медиана P/E рынка, названия компаний */
 let ROW = {};            /* строки выбранного месяца: тикер → снимок */
-let page = 0, qtext = '';
-const PAGE = 50;
+let page = 0, qtext = '', sortK = 'tk', sortDesc = false;
+const PAGE = 20;
 
 const map    = document.getElementById('map');
 const tbody  = document.querySelector('#tbl tbody');
 const tmr    = document.getElementById('tmr');
-const tmpick = document.getElementById('tmpick');
+const tmM    = document.getElementById('tmM');
+const tmY    = document.getElementById('tmY');
+const MONTHS = ['январь','февраль','март','апрель','май','июнь',
+                'июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 const status = document.getElementById('status');
 
 /* ── загрузка ───────────────────────────────────────────────────── */
@@ -721,6 +735,7 @@ async function j(u){
 async function load(){
   try { IDX = await j('/api/months'); }
   catch(e){
+    status.hidden = false;
     status.className = 'status err';
     status.textContent = 'Не удалось загрузить список бумаг. Обновите страницу.';
     return;
@@ -728,7 +743,7 @@ async function load(){
   dates = IDX.dts.map(t => new Date(t));
   cur = dates.length - 1;
   tmr.max = cur; tmr.value = cur;
-  tmpick.min = isoM(dates[0]); tmpick.max = isoM(dates[cur]);
+  fillPickers();
   document.getElementById('tmspan').textContent = fmtM(dates[0])+' — '+fmtM(dates[cur]);
   await loadMonth();
 }
@@ -737,11 +752,11 @@ async function load(){
    расчёт отдаёт снимок бумаги, — дальше вся отрисовка общая. */
 async function loadMonth(){
   const key = IDX.months[cur];
-  status.className = 'status';
-  status.textContent = 'Загрузка снимка на '+fmtM(dates[cur])+'…';
+  status.hidden = true;
   let rows;
   try { rows = await j('/api/snap?m='+key); }
   catch(e){
+    status.hidden = false;
     status.className = 'status err';
     status.textContent = 'Снимок на '+fmtM(dates[cur])+' не загрузился.';
     ROW = {}; render(); return;
@@ -752,7 +767,6 @@ async function loadMonth(){
                  cv: r.cv ? { dn:r.cv[0], up:r.cv[1] } : null,
                  acc: r.ac == null ? null : { sh: r.ac } };
   }
-  status.textContent = 'Данные загружены: цены Yahoo, отчётность EDGAR. Бумаг в списке: '+rows.length+'.';
   render();
 }
 
@@ -805,15 +819,32 @@ function drawMap(){
 /* Сводка по списку на выбранную дату: насколько бумаги заняты толпой и
    много ли среди них хороших сделок. Рабочий угол выбирается по данным —
    тот, где чаще всего оказываются бумаги с оценкой Buy и выше. */
+/* Выбор даты списками: месяц по-русски и год. Показываем только те месяцы,
+   для которых снимок есть, — промахнуться нельзя. */
+function fillPickers(){
+  const years = [...new Set(dates.map(d => d.getFullYear()))].sort();
+  tmY.innerHTML = years.map(y => '<option value="'+y+'">'+y+'</option>').join('');
+  setPickers(dates[cur]);
+}
+function fillMonths(year, keep){
+  const ms = dates.map((d,i) => [d,i]).filter(([d]) => d.getFullYear() === year);
+  tmM.innerHTML = ms.map(([d,i]) => '<option value="'+i+'">'+MONTHS[d.getMonth()]+'</option>').join('');
+  const has = ms.some(([,i]) => i === keep);
+  tmM.value = has ? keep : ms[ms.length-1][1];
+  return +tmM.value;
+}
+function setPickers(d){
+  tmY.value = d.getFullYear();
+  fillMonths(d.getFullYear(), cur);
+}
+
 function drawWeather(list){
   const rows = list.map(x => x.row).filter(r => r && r.q != null && r.pos != null);
   const pw = document.getElementById('w-pos-w');
   const bw = document.getElementById('w-buy-w');
-  const ph = document.getElementById('w-phrase');
   if (!rows.length){
     document.getElementById('w-pos').textContent = '—';
     document.getElementById('w-buy').textContent = '—';
-    ph.textContent = 'На эту дату оценок ещё нет.';
     pw.className = bw.className = 'badge b-neut';
     return;
   }
@@ -828,21 +859,13 @@ function drawWeather(list){
   const share = good.length/rows.length;
   bw.className = 'badge '+(share >= 0.25 ? 'b-ok' : share < 0.10 ? 'b-warn' : 'b-neut');
 
-  if (!good.length){
-    ph.textContent = 'Бумаг с оценкой Buy и выше в списке сейчас нет.';
-    return;
-  }
-  const tally = {};
-  for (const r of good){ const k = quad(r.q, r.pos); tally[k] = (tally[k]||0)+1; }
-  const top = Object.keys(tally).sort((a,b) => tally[b]-tally[a])[0];
-  ph.innerHTML = 'Хорошие сделки сейчас чаще всего в углу <b>«'+QD[top][0]+'»</b> — '+QD_WHY[top]+'.';
 }
 
 function render(){
   const d = dates[cur];
   document.getElementById('asof').textContent =
     'снимок на '+fmt(d)+' · цены Yahoo, отчётность EDGAR';
-  tmpick.value = isoM(d);
+  setPickers(d);
 
   const all = Object.keys(ROW).map(tk => ({tk:tk, nm:(IDX.names[tk]||tk), row:ROW[tk]}));
   drawWeather(all);
@@ -851,13 +874,22 @@ function render(){
   const list = qq
     ? all.filter(x => x.tk.toLowerCase().includes(qq) || x.nm.toLowerCase().includes(qq))
     : all;
+  const val = x => sortK === 'tk' ? x.tk
+                 : sortK === 'nm' ? x.nm
+                 : x.row ? x.row[sortK] : null;
   list.sort((a,b) => {
-    const ar = a.row && a.row.r, br = b.row && b.row.r;
-    if (ar==null && br==null) return 0;
-    if (ar==null) return 1;
-    if (br==null) return -1;
-    return ar-br || b.row.q-a.row.q;
+    const va = val(a), vb = val(b);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;          /* бумаги без оценки всегда внизу */
+    if (vb == null) return -1;
+    let c = typeof va === 'string' ? (va < vb ? -1 : va > vb ? 1 : 0) : va - vb;
+    if (sortDesc) c = -c;
+    return c || (a.tk < b.tk ? -1 : 1);
   });
+  for (const b of document.querySelectorAll('.sortbtn')){
+    if (b.dataset.k === sortK) b.setAttribute('aria-sort', sortDesc ? 'desc' : 'asc');
+    else b.removeAttribute('aria-sort');
+  }
 
   const pages = Math.max(1, Math.ceil(list.length/PAGE));
   if (page >= pages) page = pages-1;
@@ -878,7 +910,7 @@ function render(){
       (none
         ? '<td colspan="4" style="color:var(--ink2)">оценка не присваивается</td>'
         : '<td><span class="qcell">'+Math.round(r.q)+
-            '<span class="qbar"><i style="width:'+r.q+'%"></i></span></span></td>'+
+            '<span class="qbar"><i class="b'+r.r+'" style="width:'+r.q+'%"></i></span></span></td>'+
           '<td>'+Math.round(r.pos)+'</td>'+
           '<td class="grades">'+r.b.map(s => '<span>'+(s==null?'—':grade(s))+'</span>').join(' ')+'</td>'+
           '<td class="'+RCLS[r.r]+'">'+RATE[r.r]+'</td>')+
@@ -1073,19 +1105,25 @@ function fillCard(){
 tmr.addEventListener('input', () => { cur = +tmr.value; page = 0; loadMonth(); });
 /* Ввод месяца напрямую. Снимки помесячные, поэтому берём ближайший
    имеющийся: если такого месяца в истории нет, поле вернётся к нему само. */
+for (const b of document.querySelectorAll('.sortbtn')){
+  b.addEventListener('click', () => {
+    const k = b.dataset.k;
+    /* по числам первым кликом показываем лучшее сверху: рейтинг — по возрастанию
+       (Strong Buy = 0), качество — по убыванию */
+    if (sortK === k) sortDesc = !sortDesc;
+    else { sortK = k; sortDesc = (k === 'q' || k === 'pos'); }
+    page = 0; render();
+  });
+}
 document.getElementById('q').addEventListener('input', e => {
   qtext = e.target.value; page = 0; render();
 });
-tmpick.addEventListener('change', () => {
-  const m = /^(\d{4})-(\d{2})$/.exec(tmpick.value);
-  if (!m || !dates.length){ tmpick.value = isoM(dates[cur]); return; }
-  const want = +m[1]*12 + (+m[2]-1);
-  let best = 0, gap = Infinity;
-  for (let i=0;i<dates.length;i++){
-    const d = dates[i], g = Math.abs(d.getFullYear()*12 + d.getMonth() - want);
-    if (g < gap){ gap = g; best = i; }
-  }
-  cur = best; tmr.value = cur; page = 0; loadMonth();
+tmY.addEventListener('change', () => {
+  cur = fillMonths(+tmY.value, cur);
+  tmr.value = cur; page = 0; loadMonth();
+});
+tmM.addEventListener('change', () => {
+  cur = +tmM.value; tmr.value = cur; page = 0; loadMonth();
 });
 document.getElementById('tmnow').addEventListener('click', () => {
   cur = dates.length-1; tmr.value = cur; page = 0; loadMonth();

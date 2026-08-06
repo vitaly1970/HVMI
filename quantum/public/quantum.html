@@ -125,6 +125,9 @@ h1{font-size:var(--fs-display);font-weight:var(--fw-display);letter-spacing:.01e
 .tm input[type=range]:focus-visible::-webkit-slider-thumb{outline:3px solid var(--yellow)}
 .tm .tmdate{font-family:var(--monof);font-size:var(--fs-body);
   font-weight:var(--fw-mono-em);min-width:88px;text-align:right;font-variant-numeric:tabular-nums}
+.tm input.tmdate{border:1px solid var(--line);background:transparent;color:var(--ink);
+  padding:5px 8px;text-align:left;border-radius:0}
+.tm input.tmdate:focus-visible{outline:3px solid var(--yellow)}
 button{font-family:var(--sans);font-size:var(--fs-body);font-weight:var(--fw-bold);
   padding:6px 16px;border:1px solid var(--green-ink);
   background:transparent;color:var(--green-ink);cursor:pointer}
@@ -230,7 +233,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 
 <div class="darkhead">
   <a class="brand" href="#">HVMI <span>·</span> Quantum</a>
-  <span class="note">живые данные · кроме полосы режима рынка</span>
+  <span class="note">живые данные</span>
 </div>
 <div class="rule4"></div>
 
@@ -240,24 +243,23 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 </header>
 <p class="sub">Оценка сделки, а не качество компании · карта «Качество × Позиционирование» · тестовый набор из 8 бумаг</p>
 
-<section class="weather" aria-label="Режим рынка">
+<section class="weather" aria-label="Сводка по списку">
   <div class="chips">
-    <span class="badge b-ok"><span class="dot"></span>Bottom Signal: спокойно</span>
-    <span class="badge b-neut"><span class="dot"></span>Peak Signal: норма</span>
-    <span class="badge b-warn"><span class="dot"></span>Ликвидность: сокращается</span>
+    <span class="badge b-neut" id="w-pos-w"><span class="dot"></span>Crowding: <span id="w-pos">—</span></span>
+    <span class="badge b-neut" id="w-buy-w"><span class="dot"></span>Opportunities: <span id="w-buy">—</span></span>
   </div>
-  <div class="phrase">Режим рынка спокойный. В таком режиме методика выделяет угол <b>«Резерв»</b> — бумаги с высоким качеством и низким позиционированием.</div>
+  <div class="phrase" id="w-phrase">—</div>
 </section>
 
 <section class="sec-time">
   <div class="wing-head">
-    <span class="wing-title">Ретроспектива</span>
+    <span class="wing-title">История оценок</span>
     <span class="wing-nums">период · <b id="tmspan">—</b></span>
   </div>
   <div class="tm">
     <input type="range" id="tmr" min="0" max="0" step="1" value="0"
       aria-label="Дата снимка">
-    <span class="tmdate" id="tmdate">—</span>
+    <input type="month" class="tmdate" id="tmpick" aria-label="Месяц снимка">
     <button id="tmnow" type="button">К текущей дате</button>
   </div>
   <div class="tm-note">Карта, таблица и карточка пересчитываются на выбранную дату. В расчёт входят только данные, известные на эту дату.</div>
@@ -358,6 +360,13 @@ const QD = {
   tl:['Резерв','var(--q-tl)'], tr:['Ядро','var(--q-tr)'],
   bl:['Периферия','var(--q-bl)'], br:['Перегрев','var(--q-br)']
 };
+/* короткое описание угла — для сводки по списку */
+const QD_WHY = {
+  tl:'качество высокое, толпы в бумаге нет',
+  tr:'качество высокое, но участников уже много',
+  bl:'качество низкое, и внимания к бумаге нет',
+  br:'качество низкое, а участников много'
+};
 const WIN = 1260;          /* окно каузального перцентиля — пять лет */
 const DAY = 86400000;
 
@@ -368,6 +377,7 @@ const clamp = (x,a,b) => Math.min(b, Math.max(a, x));
 const fmt   = d => String(d.getDate()).padStart(2,'0')+'.'+
                    String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();
 const fmtM  = d => String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();
+const isoM  = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
 const money = v => v >= 100 ? v.toFixed(0) : v.toFixed(2);
 
 function sma(a, n){
@@ -675,6 +685,7 @@ let dates = [], cur = 0, sel = null;
 const map    = document.getElementById('map');
 const tbody  = document.querySelector('#tbl tbody');
 const tmr    = document.getElementById('tmr');
+const tmpick = document.getElementById('tmpick');
 const status = document.getElementById('status');
 
 /* ── загрузка ───────────────────────────────────────────────────── */
@@ -712,6 +723,7 @@ async function load(){
   dates = ref.rows.map(r => new Date(r.d));
   cur = dates.length-1;
   tmr.max = cur; tmr.value = cur;
+  tmpick.min = isoM(dates[0]); tmpick.max = isoM(dates[cur]);
   document.getElementById('tmspan').textContent = fmtM(dates[0])+' — '+fmtM(dates[cur]);
 
   status.textContent = bad.length
@@ -757,11 +769,47 @@ function drawMap(){
 }
 
 /* ── отрисовка ──────────────────────────────────────────────────── */
+/* Сводка по списку на выбранную дату: насколько бумаги заняты толпой и
+   много ли среди них хороших сделок. Рабочий угол выбирается по данным —
+   тот, где чаще всего оказываются бумаги с оценкой Buy и выше. */
+function drawWeather(list){
+  const rows = list.map(x => x.row).filter(r => r && r.q != null && r.pos != null);
+  const pw = document.getElementById('w-pos-w');
+  const bw = document.getElementById('w-buy-w');
+  const ph = document.getElementById('w-phrase');
+  if (!rows.length){
+    document.getElementById('w-pos').textContent = '—';
+    document.getElementById('w-buy').textContent = '—';
+    ph.textContent = 'На эту дату оценок ещё нет.';
+    pw.className = bw.className = 'badge b-neut';
+    return;
+  }
+
+  const ps = rows.map(r => r.pos).sort((a,b) => a-b);
+  const med = ps.length % 2 ? ps[(ps.length-1)/2] : (ps[ps.length/2-1]+ps[ps.length/2])/2;
+  const good = rows.filter(r => r.r <= 1);
+
+  document.getElementById('w-pos').textContent = Math.round(med)+' из 100';
+  document.getElementById('w-buy').textContent = good.length+' из '+rows.length;
+  pw.className = 'badge '+(med < 45 ? 'b-ok' : med > 65 ? 'b-warn' : 'b-neut');
+  const share = good.length/rows.length;
+  bw.className = 'badge '+(share >= 0.25 ? 'b-ok' : share < 0.10 ? 'b-warn' : 'b-neut');
+
+  if (!good.length){
+    ph.textContent = 'Бумаг с оценкой Buy и выше в списке сейчас нет.';
+    return;
+  }
+  const tally = {};
+  for (const r of good){ const k = quad(r.q, r.pos); tally[k] = (tally[k]||0)+1; }
+  const top = Object.keys(tally).sort((a,b) => tally[b]-tally[a])[0];
+  ph.innerHTML = 'Хорошие сделки сейчас чаще всего в углу <b>«'+QD[top][0]+'»</b> — '+QD_WHY[top]+'.';
+}
+
 function render(){
   const d = dates[cur];
   document.getElementById('asof').textContent =
     'снимок на '+fmt(d)+' · цены Yahoo, отчётность EDGAR';
-  document.getElementById('tmdate').textContent = fmtM(d);
+  tmpick.value = isoM(d);
 
   const list = NAMES.filter(([tk]) => DATA[tk]).map(([tk,nm]) => ({tk:tk, nm:nm, row:snapAt(tk)}));
   list.sort((a,b) => {
@@ -771,6 +819,8 @@ function render(){
     if (br==null) return -1;
     return ar-br || b.row.q-a.row.q;
   });
+
+  drawWeather(list);
 
   tbody.innerHTML = '';
   for (const x of list){
@@ -931,6 +981,19 @@ function fillCard(){
 
 /* ── ретроспектива ──────────────────────────────────────────────── */
 tmr.addEventListener('input', () => { cur = +tmr.value; render(); });
+/* Ввод месяца напрямую. Снимки помесячные, поэтому берём ближайший
+   имеющийся: если такого месяца в истории нет, поле вернётся к нему само. */
+tmpick.addEventListener('change', () => {
+  const m = /^(\d{4})-(\d{2})$/.exec(tmpick.value);
+  if (!m || !dates.length){ tmpick.value = isoM(dates[cur]); return; }
+  const want = +m[1]*12 + (+m[2]-1);
+  let best = 0, gap = Infinity;
+  for (let i=0;i<dates.length;i++){
+    const d = dates[i], g = Math.abs(d.getFullYear()*12 + d.getMonth() - want);
+    if (g < gap){ gap = g; best = i; }
+  }
+  cur = best; tmr.value = cur; render();
+});
 document.getElementById('tmnow').addEventListener('click', () => {
   cur = dates.length-1; tmr.value = cur; render();
 });

@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantum Rating — HVMI</title>
+<meta name="description" content="Quantum Rating — оценка сделки по бумаге: качество компании и позиционирование участников, с пересчётом на любую дату прошлого.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sans:'Manrope',system-ui,sans-serif;
+  --monof:'Manrope',system-ui,sans-serif;
+
+  --fs-micro:.6875rem; --fs-meta:.75rem; --fs-body:.875rem;
+  --fs-head:1rem; --fs-display:1.375rem;
+  --fw-display:400; --fw-reg:400; --fw-bold:600; --fw-mono-em:500;
+
+  --ink:#1a1a1a; --ink2:#767676; --muted:#8A8A8A;
+  --line:#E4E4E4; --rule:#EDEDED; --card:#F8F8F8;
+
+  --blue:#00A4EF; --violet:#7550BE; --yellow:#FFB900;
+  --green:#7FBA00; --green-ink:#457E00;
+  --ok:#457E00; --ok-dot:#7FBA00;
+  --warn:#8A6D00; --warn-dot:#F0B400;
+  --red:#C0391A; --red-bg:#FBF1EF;
+  --marker:#00709F;
+
+  /* цвета углов карты — по принятому эскизу (палитра логотипа Microsoft) */
+  --q-tl:#F25022; --q-tr:#7FBA00; --q-bl:#00A4EF; --q-br:#FFB900;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:#fff}
+body{background:#fff;color:var(--ink);font-family:var(--sans);
+  font-size:var(--fs-body);line-height:1.5;
+  -webkit-font-smoothing:antialiased;padding:0 20px 34px;
+  max-width:1000px;margin:0 auto}
+.mono{font-family:var(--monof)}
+
+/* ── тёмная Metro-шапка (по эскизу) ─────────────────────────────── */
+.darkhead{background:var(--ink);color:#fff;
+  margin:0 -20px;padding:14px 20px;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.darkhead .brand{font-size:var(--fs-head);font-weight:var(--fw-bold);
+  letter-spacing:.02em;color:#fff;text-decoration:none}
+.darkhead .brand span{color:var(--yellow)}
+.darkhead .note{font-family:var(--monof);font-size:var(--fs-micro);color:#bdbdbd}
+.rule4{height:2px;margin:0 -20px 22px;
+  background:linear-gradient(to right,
+    var(--blue) 0 25%, var(--green) 25% 50%,
+    var(--yellow) 50% 75%, var(--violet) 75% 100%)}
+
+header{display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:6px;flex-wrap:wrap;gap:10px}
+h1{font-size:var(--fs-display);font-weight:var(--fw-display);letter-spacing:.01em}
+.sub{font-size:var(--fs-body);color:var(--ink2);margin-bottom:4px}
+#asof{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof)}
+
+/* ── полоса «Погода» ─────────────────────────────────────────────── */
+.weather{border-left:3px solid var(--blue);padding:10px 14px;margin:18px 0 26px}
+.weather .chips{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:5px}
+.badge{display:inline-flex;align-items:center;gap:7px;
+  font-size:var(--fs-body);font-weight:var(--fw-bold)}
+.badge .dot{width:9px;height:9px;flex:none}
+.b-ok{color:var(--ok)} .b-ok .dot{background:var(--ok-dot)}
+.b-warn{color:var(--warn)} .b-warn .dot{background:var(--warn-dot)}
+.b-neut{color:var(--ink2)} .b-neut .dot{background:var(--ink2)}
+.weather .phrase{font-size:var(--fs-meta);color:var(--ink2);font-family:var(--monof)}
+.weather .phrase b{color:var(--ink);font-weight:var(--fw-mono-em)}
+
+/* ── заголовки секций ────────────────────────────────────────────── */
+.wing-head{position:relative;padding-bottom:10px;margin-bottom:14px;
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.wing-head::after{content:'';position:absolute;left:0;bottom:0;width:64px;height:2px;background:var(--blue)}
+.wing-title{font-size:var(--fs-head);font-weight:var(--fw-bold);letter-spacing:.01em;
+  display:inline-flex;align-items:center}
+.wing-title::before{content:'';width:10px;height:10px;margin-right:8px;flex:none;background:var(--blue)}
+.wing-nums{font-family:var(--monof);font-size:var(--fs-meta);color:var(--ink2)}
+.wing-nums b{color:var(--ink);font-weight:var(--fw-mono-em)}
+.sec-time .wing-head::after{background:var(--violet)}
+.sec-time .wing-title::before{background:var(--violet)}
+.sec-tbl .wing-head::after{background:var(--green)}
+.sec-tbl .wing-title::before{background:var(--green)}
+
+/* ── карта квадрантов ────────────────────────────────────────────── */
+.maprow{display:grid;grid-template-columns:18px 1fr;gap:6px;max-width:620px;margin:0 auto}
+.axis-y{writing-mode:vertical-rl;transform:rotate(180deg);
+  font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);
+  display:flex;align-items:center;justify-content:center}
+.axis-x{grid-column:2;text-align:center;
+  font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:2px}
+.map{position:relative;aspect-ratio:1/1;
+  display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+  gap:6px;background:#fff}
+.tile{position:relative}
+.tile .qlbl{position:absolute;font-size:var(--fs-meta);font-weight:var(--fw-bold);
+  color:var(--ink);opacity:.85;padding:8px 10px;max-width:60%;line-height:1.25}
+.t-tl{background:var(--q-tl)} .t-tl .qlbl{top:0;left:0}
+.t-tr{background:var(--q-tr)} .t-tr .qlbl{top:0;right:0;text-align:right}
+.t-bl{background:var(--q-bl)} .t-bl .qlbl{bottom:0;left:0}
+.t-br{background:var(--q-br)} .t-br .qlbl{bottom:0;right:0;text-align:right}
+.pt{position:absolute;width:10px;height:10px;background:var(--ink);
+  transform:translate(-50%,-50%);cursor:pointer;border:0;padding:0;z-index:2}
+.pt:hover{outline:2px solid #fff}
+.pt:focus-visible{outline:3px solid var(--yellow)}
+.pt.sel{outline:3px solid #fff;z-index:4}
+.pt .tag{position:absolute;left:12px;top:-4px;background:var(--ink);color:#fff;
+  font-family:var(--monof);font-size:var(--fs-micro);line-height:1;
+  padding:3px 5px;white-space:nowrap;pointer-events:none}
+.pt.flip .tag{left:auto;right:12px}
+.trail{position:absolute;width:5px;height:5px;background:var(--ink);
+  transform:translate(-50%,-50%);pointer-events:none;z-index:1}
+.maplegend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);
+  text-align:center;margin-top:8px}
+
+/* ── машина времени ──────────────────────────────────────────────── */
+.tm{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tm input[type=range]{flex:1;min-width:220px;-webkit-appearance:none;appearance:none;
+  height:2px;background:var(--line);outline:none}
+.tm input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:16px;height:16px;background:var(--violet);cursor:pointer;border:0;border-radius:0}
+.tm input[type=range]::-moz-range-thumb{width:16px;height:16px;background:var(--violet);
+  cursor:pointer;border:0;border-radius:0}
+.tm input[type=range]:focus-visible::-webkit-slider-thumb{outline:3px solid var(--yellow)}
+.tm .tmdate{font-family:var(--monof);font-size:var(--fs-body);
+  font-weight:var(--fw-mono-em);min-width:88px;text-align:right;font-variant-numeric:tabular-nums}
+button{font-family:var(--sans);font-size:var(--fs-body);font-weight:var(--fw-bold);
+  padding:6px 16px;border:1px solid var(--green-ink);
+  background:transparent;color:var(--green-ink);cursor:pointer}
+button:focus-visible{outline:3px solid var(--yellow)}
+.tm-note{font-size:var(--fs-meta);color:var(--ink2);margin-top:8px;font-family:var(--monof)}
+
+/* ── таблица ─────────────────────────────────────────────────────── */
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-family:var(--monof);
+  font-size:var(--fs-meta);font-variant-numeric:tabular-nums}
+th{font-size:var(--fs-micro);color:var(--muted);font-weight:var(--fw-reg);
+  text-align:left;padding:0 10px 5px 0;white-space:nowrap}
+td{padding:7px 10px 7px 0;border-top:1px solid var(--rule);
+  vertical-align:middle;white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--card)}
+tbody tr:focus-visible{outline:3px solid var(--yellow);outline-offset:-3px}
+tbody tr.sel td{background:var(--card)}
+td.tick{font-weight:var(--fw-mono-em)}
+td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.qcell{display:inline-flex;align-items:center;gap:8px}
+.qbar{width:64px;height:6px;background:var(--rule);position:relative;flex:none}
+.qbar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink)}
+.grades span{display:inline-block;min-width:20px}
+.r-sb,.r-b{color:var(--ok);font-weight:var(--fw-mono-em)}
+.r-h{color:var(--ink2)}
+.r-s,.r-ss{color:var(--red);font-weight:var(--fw-mono-em)}
+.qd{display:inline-flex;align-items:center;gap:6px}
+.qd i{width:8px;height:8px;flex:none}
+td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
+.tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
+
+/* ── карточка бумаги ─────────────────────────────────────────────── */
+.scard{background:var(--card);border-top:2px solid var(--blue);
+  padding:14px 16px;margin-top:18px}
+.scard[hidden]{display:none}
+.scard .head{display:flex;justify-content:space-between;align-items:baseline;
+  gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.scard .cbody{display:grid;grid-template-columns:minmax(230px,290px) 1fr;
+  gap:22px;align-items:start}
+.scard .maprow{max-width:none;margin:0}
+.scard .tile .qlbl{font-size:var(--fs-micro);padding:6px 7px;max-width:72%}
+.scard .maplegend{text-align:left;margin-top:7px}
+@media (max-width:680px){.scard .cbody{grid-template-columns:1fr}}
+.scard .nm{font-size:var(--fs-head);font-weight:var(--fw-bold)}
+.scard .nm span{color:var(--ink2);font-weight:var(--fw-reg)}
+.scard .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:8px 20px;font-family:var(--monof);font-size:var(--fs-meta)}
+.scard .grid .k{color:var(--ink2)}
+.scard .grid .v{font-weight:var(--fw-mono-em)}
+.scard .blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+  gap:10px;margin:12px 0}
+.blk{border-top:1px solid var(--line);padding-top:6px;
+  font-family:var(--monof);font-size:var(--fs-meta)}
+.blk .bk{color:var(--ink2)}
+.blk .bv{font-weight:var(--fw-mono-em)}
+.blk .bbar{height:4px;background:var(--rule);margin-top:5px;position:relative}
+.blk .bbar i{position:absolute;left:0;top:0;bottom:0;background:var(--marker)}
+.scard .why{font-size:var(--fs-body);border-left:3px solid var(--violet);
+  padding:6px 12px;margin-top:10px}
+.status{font-family:var(--monof);font-size:var(--fs-meta);color:var(--ink2);padding:8px 0}
+.status.err{color:var(--red)}
+.ladder{margin-top:14px}
+.ladder .wt2{font-size:var(--fs-micro);color:var(--muted);
+  font-family:var(--monof);margin-bottom:4px}
+.lrow{display:grid;grid-template-columns:96px 1fr auto;gap:10px;align-items:center;
+  font-family:var(--monof);font-size:var(--fs-meta);
+  padding:5px 0;border-top:1px solid var(--rule);font-variant-numeric:tabular-nums}
+.lrow .lg{font-weight:var(--fw-mono-em)}
+.lrow .lx{color:var(--muted)}
+.lrow.now{background:var(--card)}
+.lrow.now .lnow{color:var(--marker);font-weight:var(--fw-mono-em)}
+.lnote{font-size:var(--fs-micro);color:var(--muted);
+  font-family:var(--monof);margin-top:7px}
+.scard .why .wt{font-size:var(--fs-micro);color:var(--muted);
+  font-family:var(--monof);margin-bottom:2px}
+.scard .dq{background:var(--red-bg);border-left:3px solid var(--red);
+  color:var(--red);padding:8px 12px;font-size:var(--fs-body);margin-top:6px}
+
+/* ── подвал ──────────────────────────────────────────────────────── */
+.wingsep{display:flex;align-items:center;gap:14px;margin:34px 0 18px}
+.wingsep::before,.wingsep::after{content:'';flex:1;height:1px;background:var(--line)}
+.wingsep .w1,.wingsep .w2{width:9px;height:9px;flex:none}
+.wingsep .w1{background:var(--blue);margin-right:-11px}
+.wingsep .w2{background:var(--violet)}
+.foot{font-size:var(--fs-meta);color:var(--ink2)}
+.foot .cop{font-size:var(--fs-micro);color:var(--muted);
+  font-family:var(--monof);margin-top:10px}
+
+@media (prefers-reduced-motion: no-preference){
+  .pt,.trail{transition:left .25s ease,top .25s ease}
+  .qbar i,.blk .bbar i{transition:width .25s ease}
+}
+@media (max-width:560px){
+  .tile .qlbl{max-width:72%;padding:6px 7px}
+  .darkhead .note{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="darkhead">
+  <a class="brand" href="#">HVMI <span>·</span> Quantum</a>
+  <span class="note">живые данные · кроме полосы режима рынка</span>
+</div>
+<div class="rule4"></div>
+
+<header>
+  <h1>Quantum Rating</h1>
+  <span id="asof">снимок на —</span>
+</header>
+<p class="sub">Оценка сделки, а не качество компании · карта «Качество × Позиционирование» · тестовый набор из 8 бумаг</p>
+
+<section class="weather" aria-label="Режим рынка">
+  <div class="chips">
+    <span class="badge b-ok"><span class="dot"></span>Bottom Signal: спокойно</span>
+    <span class="badge b-neut"><span class="dot"></span>Peak Signal: норма</span>
+    <span class="badge b-warn"><span class="dot"></span>Ликвидность: сокращается</span>
+  </div>
+  <div class="phrase">Режим рынка спокойный. В таком режиме методика выделяет угол <b>«Резерв»</b> — бумаги с высоким качеством и низким позиционированием.</div>
+</section>
+
+<section class="sec-time">
+  <div class="wing-head">
+    <span class="wing-title">Ретроспектива</span>
+    <span class="wing-nums">период · <b id="tmspan">—</b></span>
+  </div>
+  <div class="tm">
+    <input type="range" id="tmr" min="0" max="0" step="1" value="0"
+      aria-label="Дата снимка">
+    <span class="tmdate" id="tmdate">—</span>
+    <button id="tmnow" type="button">К текущей дате</button>
+  </div>
+  <div class="tm-note">Карта, таблица и карточка пересчитываются на выбранную дату. В расчёт входят только данные, известные на эту дату.</div>
+</section>
+
+<section class="sec-tbl" style="margin-top:30px">
+  <div class="wing-head">
+    <span class="wing-title">Оценки сделок</span>
+    <span class="wing-nums">сортировка · <b>по оценке сделки</b></span>
+  </div>
+  <div class="status" id="status">Загрузка цен и отчётности…</div>
+  <div class="tblwrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Тикер</th><th>Компания</th><th>Качество</th><th>Позиционирование</th>
+          <th>О&nbsp;·&nbsp;Р&nbsp;·&nbsp;К&nbsp;·&nbsp;М&nbsp;·&nbsp;Э</th>
+          <th>Положение на карте</th><th>Оценка сделки</th><th>Ограничение</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. О — оценка стоимости · Р — рост · К — качество бизнеса · М — моментум · Э — реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
+</section>
+
+<section class="scard" id="card" hidden aria-live="polite">
+  <div class="head">
+    <span class="nm" id="c-nm">—</span>
+    <span class="mono" id="c-rt" style="font-size:var(--fs-body)">—</span>
+  </div>
+  <div class="cbody">
+    <div class="cmap" id="c-map-wrap">
+      <div class="maprow">
+        <div class="axis-y">Качество →</div>
+        <div class="map" id="map" role="img" aria-label="Положение бумаги по осям качества и позиционирования">
+          <div class="tile t-tl"><span class="qlbl">Резерв</span></div>
+          <div class="tile t-tr"><span class="qlbl">Ядро</span></div>
+          <div class="tile t-bl"><span class="qlbl">Периферия</span></div>
+          <div class="tile t-br"><span class="qlbl">Перегрев</span></div>
+        </div>
+        <div class="axis-x">Позиционирование →</div>
+      </div>
+      <div class="maplegend">Положение за последние 12 месяцев</div>
+    </div>
+    <div class="cinfo">
+      <div class="grid">
+        <div><span class="k">Качество · </span><span class="v" id="c-q">—</span></div>
+        <div><span class="k">Позиционирование · </span><span class="v" id="c-t">—</span></div>
+        <div><span class="k">Положение на карте · </span><span class="v" id="c-qd">—</span></div>
+      </div>
+      <div class="blocks" id="c-blocks"></div>
+      <div class="why" id="c-shift">
+        <div class="wt">как получилась оценка сделки</div>
+        <div id="c-shift-t">—</div>
+      </div>
+      <div class="ladder" id="c-ladder-wrap">
+        <div class="wt2">при какой цене оценка станет другой</div>
+        <div id="c-ladder"></div>
+        <div class="lnote">Границы пересчитываются каждый день вместе с отчётностью и ценой. Это не ценовая цель и не уровень для заявки.</div>
+      </div>
+      <div class="why" id="c-why">
+        <div class="wt">последняя смена оценки</div>
+        <div id="c-why-t">—</div>
+      </div>
+      <div class="dq" id="c-dq" hidden></div>
+    </div>
+  </div>
+</section>
+
+<div class="wingsep"><span class="w1"></span><span class="w2"></span></div>
+<div class="foot">
+  Оценка относится к сделке — покупке бумаги по текущей цене, — а не к качеству бизнеса. Оценки отражают методику HVMI и не являются индивидуальной инвестиционной рекомендацией. Они пересчитываются на каждую дату только по данным, доступным на эту дату.
+  <div class="cop">Helicopter View Market Intelligence · © <span id="yy"></span></div>
+</div>
+
+<script>
+'use strict';
+/* Quantum Rating — живые данные.
+   Цены: Yahoo через /api/px. Отчётность: EDGAR через /api/fund.
+   Причинность: на снимке прошлого используются только цифры, опубликованные
+   к тому дню (дата подачи из EDGAR), и только цены до этого дня. */
+
+const API = '';            /* базовый адрес маршрутов — единственная строка при переезде */
+
+const NAMES = [
+  ['NVDA','NVIDIA'], ['MSFT','Microsoft'], ['COST','Costco'], ['PGR','Progressive'],
+  ['DE','Deere'], ['ANET','Arista Networks'], ['CMG','Chipotle'], ['DECK','Deckers Outdoor']
+];
+const BLOCKS = [
+  ['О','Оценка стоимости'], ['Р','Рост'], ['К','Качество бизнеса'],
+  ['М','Моментум'], ['Э','Реакция на отчётность']
+];
+const RATE = ['Strong Buy','Buy','Hold','Sell','Strong Sell'];
+const RCLS = ['r-sb','r-b','r-h','r-s','r-ss'];
+const QD = {
+  tl:['Резерв','var(--q-tl)'], tr:['Ядро','var(--q-tr)'],
+  bl:['Периферия','var(--q-bl)'], br:['Перегрев','var(--q-br)']
+};
+const WIN = 1260;          /* окно каузального перцентиля — пять лет */
+const DAY = 86400000;
+
+document.getElementById('yy').textContent = new Date().getFullYear();
+
+/* ── мелкие помощники ───────────────────────────────────────────── */
+const clamp = (x,a,b) => Math.min(b, Math.max(a, x));
+const fmt   = d => String(d.getDate()).padStart(2,'0')+'.'+
+                   String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();
+const fmtM  = d => String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();
+const money = v => v >= 100 ? v.toFixed(0) : v.toFixed(2);
+
+function sma(a, n){
+  const o = new Array(a.length).fill(null); let s = 0;
+  for (let i=0;i<a.length;i++){
+    s += a[i]; if (i>=n) s -= a[i-n];
+    if (i>=n-1) o[i] = s/n;
+  }
+  return o;
+}
+/* доля значений окна, которые меньше текущего: 0..100, только прошлое */
+function pctRank(arr, i, win){
+  const v = arr[i]; if (v==null) return null;
+  let c=0, n=0;
+  for (let k=Math.max(0,i-win+1); k<=i; k++){
+    const x = arr[k]; if (x==null) continue;
+    n++; if (x < v) c++;
+  }
+  return n < 60 ? null : c/n*100;
+}
+function rankIn(win, v){
+  if (!win.length) return 50;
+  let c=0; for (const x of win) if (x < v) c++;
+  return c/win.length*100;
+}
+function grade(x){
+  if (x>=90) return 'A+'; if (x>=80) return 'A'; if (x>=70) return 'B+';
+  if (x>=60) return 'B';  if (x>=50) return 'C+'; if (x>=40) return 'C';
+  if (x>=30) return 'D';  return 'F';
+}
+function mean(a){
+  const v = a.filter(x => x!=null);
+  return v.length ? v.reduce((s,x)=>s+x,0)/v.length : null;
+}
+
+/* ── разбор отчётности ──────────────────────────────────────────── */
+/* строка EDGAR: [начало, конец, дата подачи, значение] */
+function quarters(rows){
+  /* Часть эмитентов (Progressive и другие) отдельный четвёртый квартал не
+     публикует вовсе: в отчётности лежат нарастающие итоги — три месяца,
+     полгода, девять месяцев, год. Такой квартал восстанавливаем вычитанием
+     предыдущего накопленного периода. */
+  const byStart = new Map();
+  for (const [s,e,f,v] of rows){
+    if (!s) continue;
+    const dur = (Date.parse(e)-Date.parse(s))/DAY;
+    if (dur < 75 || dur > 400) continue;
+    if (!byStart.has(s)) byStart.set(s, []);
+    byStart.get(s).push({ e:e, f:f, v:v, dur:dur });
+  }
+  const out = new Map();
+  for (const arr of byStart.values()){
+    arr.sort((a,b) => a.dur-b.dur);
+    for (let i=0;i<arr.length;i++){
+      const x = arr[i];
+      /* Верхняя граница 125 дней — розничные календари 4-4-5, где
+         четвёртый квартал длиннее обычного. */
+      const plain = x.dur <= 125;
+      let val, fil;
+      if (plain){ val = x.v; fil = x.f; }
+      else {
+        const prev = arr[i-1];
+        if (!prev) continue;
+        const gap = x.dur-prev.dur;
+        if (gap < 75 || gap > 125) continue;
+        val = x.v-prev.v;
+        fil = x.f > prev.f ? x.f : prev.f;
+      }
+      const cur = out.get(x.e), fd = Date.parse(fil);
+      /* Прямо опубликованный квартал важнее восстановленного;
+         при равенстве берём самую раннюю подачу — первую публикацию. */
+      if (!cur || (plain && !cur.plain) || (plain === cur.plain && fd < cur.f))
+        out.set(x.e, { e:Date.parse(x.e), f:fd, v:val, plain:plain });
+    }
+  }
+  return [...out.values()].sort((a,b)=>a.e-b.e);
+}
+function instants(rows){
+  const m = new Map();
+  for (const [s,e,f,v] of rows){
+    if (s) continue;
+    const cur = m.get(e), fd = Date.parse(f);
+    if (!cur || fd < cur.f) m.set(e, {e:Date.parse(e), f:fd, v:v});
+  }
+  return [...m.values()].sort((a,b)=>a.e-b.e);
+}
+/* скользящая сумма четырёх кварталов; доступна с последней из четырёх подач */
+function ttm(qs){
+  const o = [];
+  for (let i=3;i<qs.length;i++){
+    let ok = true;
+    for (let k=i-2;k<=i;k++){
+      const dd = (qs[k].e-qs[k-1].e)/DAY;
+      if (dd < 70 || dd > 130) ok = false;           /* разрыв в ряду — пропускаем */
+    }
+    if (!ok) continue;
+    o.push({ e:qs[i].e,
+             f:Math.max(qs[i].f,qs[i-1].f,qs[i-2].f,qs[i-3].f),
+             v:qs[i].v+qs[i-1].v+qs[i-2].v+qs[i-3].v });
+  }
+  return o;
+}
+/* дневной ступенчатый ряд: значение, опубликованное к этому дню */
+function step(days, pts){
+  const s = pts.slice().sort((a,b)=>a.f-b.f);
+  const o = new Array(days.length).fill(null);
+  let j=0, best=null;
+  for (let i=0;i<days.length;i++){
+    while (j<s.length && s[j].f <= days[i]){
+      if (!best || s[j].e >= best.e) best = s[j];
+      j++;
+    }
+    o[i] = best ? best.v : null;
+  }
+  return o;
+}
+/* рост год к году по ряду TTM */
+function yoy(list){
+  const o = [];
+  for (let i=4;i<list.length;i++){
+    const prev = list[i-4].v;
+    if (!prev || prev <= 0) continue;
+    o.push({ e:list[i].e, f:list[i].f, v:list[i].v/prev-1 });
+  }
+  return o;
+}
+
+/* ── сборка одной бумаги ────────────────────────────────────────── */
+function build(tk, px, fu){
+  const days = px.t.map(x => x*1000);
+  const c = px.c, v = px.v, n = c.length;
+
+  const s200 = sma(c,200), s20v = sma(v,20), s250v = sma(v,250);
+
+  const stretch = new Array(n).fill(null);
+  const volr    = new Array(n).fill(null);
+  const up60    = new Array(n).fill(null);
+  const mom     = new Array(n).fill(null);
+  let ups = 0;
+  for (let i=0;i<n;i++){
+    if (i>0 && c[i] > c[i-1]) ups++;
+    if (i>60 && c[i-60] > c[i-61]) ups--;
+    if (i>=60) up60[i] = ups/60*100;
+    if (s200[i]) stretch[i] = c[i]/s200[i]-1;
+    if (s250v[i]) volr[i] = s20v[i]/s250v[i];
+    if (i>=252) mom[i] = c[i-21]/c[i-252]-1;         /* моментум 12 минус 1 месяц */
+  }
+
+  /* Прибыль на акцию из EDGAR — как её опубликовали тогда, без учёта дроблений.
+     Цены Yahoo, наоборот, к дроблениям приведены. Без этой поправки отношение
+     прибыли к цене у NVDA, CMG и DECK было бы искажено в разы. */
+  const splits = (px.sp || []).map(x => ({ t:x[0]*1000, r:x[1] })).sort((a,b)=>a.t-b.t);
+  const perShare = ms => { let f=1; for (const s of splits) if (s.t > ms) f *= s.r; return f; };
+
+  const qe = quarters(fu.eps).map(x => ({ e:x.e, f:x.f, v:x.v/perShare(x.e) }));
+  const qr = quarters(fu.rev), qn = quarters(fu.ni);
+  const tEps = ttm(qe), tRev = ttm(qr), tNi = ttm(qn);
+  const eq = instants(fu.eq);
+
+  const epsD = step(days, tEps), revD = step(days, tRev);
+  const niD  = step(days, tNi),  eqD  = step(days, eq);
+  const grD  = step(days, yoy(tRev)), geD = step(days, yoy(tEps));
+
+  const ep = new Array(n).fill(null);                /* прибыль на цену */
+  for (let i=0;i<n;i++) if (epsD[i]!=null && c[i]>0) ep[i] = epsD[i]/c[i];
+
+  /* реакция цены на публикацию отчёта */
+  const react = [];
+  for (const q of qe){
+    let j = days.findIndex(d => d >= q.f);
+    if (j < 1) continue;
+    react.push({ i:j, r:c[j]/c[j-1]-1 });
+  }
+  react.sort((a,b)=>a.i-b.i);
+
+  /* месячные снимки */
+  const snaps = [];
+  for (let i=500;i<n;i++){
+    const last = (i===n-1) || (new Date(days[i+1]).getMonth() !== new Date(days[i]).getMonth());
+    if (last) snaps.push(i);
+  }
+
+  const rows = snaps.map(i => {
+    const O = pctRank(ep, i, WIN);
+    const M = pctRank(mom, i, WIN);
+    const P = (grD[i]==null && geD[i]==null) ? null
+              : mean([grD[i]==null?null:clamp(50+125*grD[i],0,100),
+                      geD[i]==null?null:clamp(50+125*geD[i],0,100)]);
+    const roe = (niD[i]!=null && eqD[i]) ? niD[i]/eqD[i] : null;
+    const mar = (niD[i]!=null && revD[i]) ? niD[i]/revD[i] : null;
+    const K = mean([roe==null?null:clamp(20+220*roe,0,100),
+                    mar==null?null:clamp(25+200*mar,0,100)]);
+    const rr = react.filter(x => x.i <= i).slice(-8);
+    const E = rr.length >= 4 ? clamp(50 + 800*mean(rr.map(x=>x.r)), 0, 100) : null;
+
+    const b = [O,P,K,M,E];
+    const q = b.filter(x=>x!=null).length >= 4 ? mean(b) : null;
+    const pos = mean([pctRank(stretch,i,WIN), pctRank(volr,i,WIN), pctRank(up60,i,WIN)]);
+    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:(q==null||pos==null)?null:finalIdx(q,pos) };
+  });
+
+  return { tk:tk, days:days, c:c, s200:s200, ep:ep, stretch:stretch, volr:volr,
+           up60:up60, epsD:epsD, rows:rows };
+}
+
+/* ── оценка сделки ──────────────────────────────────────────────── */
+function baseIdx(q){
+  if (q>=80) return 0; if (q>=65) return 1; if (q>=45) return 2; if (q>=30) return 3;
+  return 4;
+}
+function shiftOf(q, pos){
+  if (pos < 35) return q >= 65 ? -1 : 0;             /* вверх — только качественные */
+  if (pos <= 65) return 0;
+  return pos <= 85 ? 1 : 2;
+}
+function finalIdx(q, pos){ return clamp(baseIdx(q)+shiftOf(q,pos), 0, 4); }
+function quad(q, pos){ return q>=50 ? (pos<50?'tl':'tr') : (pos<50?'bl':'br'); }
+
+/* ── лестница цен ───────────────────────────────────────────────── */
+/* Что меняется при подстановке цены: оценка стоимости и растяжение от средней.
+   Моментум, рост, качество бизнеса, реакция на отчётность и объёмы держатся
+   на факте — иначе лестница получается неустойчивой. */
+function ladder(S, row){
+  const i = row.i;
+  if (row.q == null || S.epsD[i] == null || !S.s200[i]) return null;
+
+  const epWin = [], stWin = [];
+  for (let k=Math.max(0,i-WIN+1); k<=i; k++){
+    if (S.ep[k]!=null) epWin.push(S.ep[k]);
+    if (S.stretch[k]!=null) stWin.push(S.stretch[k]);
+  }
+  const volR = pctRank(S.volr,i,WIN), upR = pctRank(S.up60,i,WIN);
+  if (volR==null || upR==null) return null;
+
+  const eps = S.epsD[i], s2 = S.s200[i];
+  const fixed = [row.b[1], row.b[2], row.b[3], row.b[4]];
+
+  const at = p => {
+    const O = rankIn(epWin, eps/p);
+    const pos = (rankIn(stWin, p/s2-1) + volR + upR)/3;
+    const q = mean([O].concat(fixed));
+    return finalIdx(q, pos);
+  };
+
+  const lo = row.px*0.2, hi = row.px*5, N = 700;
+  const band = RATE.map(()=>({min:null,max:null}));
+  for (let k=0;k<=N;k++){
+    const p = lo*Math.pow(hi/lo, k/N);
+    const r = at(p);
+    const b = band[r];
+    if (b.min==null || p<b.min) b.min = p;
+    if (b.max==null || p>b.max) b.max = p;
+  }
+  return { band:band, lo:lo, hi:hi, price:row.px };
+}
+
+/* ── состояние ──────────────────────────────────────────────────── */
+const DATA = {};
+let dates = [], cur = 0, sel = null;
+
+const map    = document.getElementById('map');
+const tbody  = document.querySelector('#tbl tbody');
+const tmr    = document.getElementById('tmr');
+const status = document.getElementById('status');
+
+/* ── загрузка ───────────────────────────────────────────────────── */
+async function j(u){
+  const r = await fetch(API+u);
+  if (!r.ok){
+    let m = r.status;
+    try { const e = await r.json(); if (e.error) m = e.error; } catch(_){}
+    throw new Error(m);
+  }
+  return r.json();
+}
+async function load(){
+  const bad = [];
+  let done = 0;
+  await Promise.all(NAMES.map(async ([tk]) => {
+    try {
+      const [px,fu] = await Promise.all([j('/api/px?t='+tk), j('/api/fund?t='+tk)]);
+      DATA[tk] = build(tk, px, fu);
+    } catch(e){ console.error(tk, e); bad.push(tk+' ('+e.message+')'); }
+    done++;
+    status.textContent = 'Загрузка данных: '+done+' из '+NAMES.length+'…';
+  }));
+
+  const ok = Object.keys(DATA);
+  if (!ok.length){
+    status.className = 'status err';
+    status.textContent = 'Нет данных. Нажмите «Обновить страницу» — источник мог не ответить.';
+    return;
+  }
+
+  /* общая шкала дат — по бумаге с самой длинной историей снимков */
+  let ref = DATA[ok[0]];
+  for (const k of ok) if (DATA[k].rows.length > ref.rows.length) ref = DATA[k];
+  dates = ref.rows.map(r => new Date(r.d));
+  cur = dates.length-1;
+  tmr.max = cur; tmr.value = cur;
+  document.getElementById('tmspan').textContent = fmtM(dates[0])+' — '+fmtM(dates[cur]);
+
+  status.textContent = bad.length
+    ? 'Не загрузились: '+bad.join(', ')+'. Остальные бумаги посчитаны.'
+    : 'Данные загружены: цены Yahoo, отчётность EDGAR.';
+  if (bad.length) status.className = 'status err';
+
+  render();
+}
+
+/* снимок бумаги, ближайший к выбранной дате и не позже неё */
+function snapAt(tk){
+  const S = DATA[tk]; if (!S) return null;
+  const t = dates[cur].getTime();
+  let out = null;
+  for (const r of S.rows){ if (r.d <= t) out = r; else break; }
+  return out;
+}
+
+/* ── карта ──────────────────────────────────────────────────────── */
+function drawMap(){
+  map.querySelectorAll('.pt,.trail').forEach(e => e.remove());
+  if (!sel) return;
+  const S = DATA[sel]; const row = snapAt(sel);
+  if (!row || row.q == null) return;
+
+  const hist = S.rows.filter(r => r.d <= row.d && r.q != null).slice(-13, -1);
+  hist.forEach((r,k) => {
+    const s = document.createElement('span');
+    s.className = 'trail';
+    s.style.left = r.pos+'%'; s.style.top = (100-r.q)+'%';
+    s.style.opacity = (0.15 + 0.5*(k+1)/hist.length).toFixed(2);
+    map.appendChild(s);
+  });
+
+  const el = document.createElement('span');
+  el.className = 'pt sel'+(row.pos>62?' flip':'');
+  el.style.left = row.pos+'%'; el.style.top = (100-row.q)+'%';
+  el.innerHTML = '<span class="tag">'+sel+'</span>';
+  map.appendChild(el);
+  map.setAttribute('aria-label', sel+': качество '+Math.round(row.q)+
+    ', позиционирование '+Math.round(row.pos)+'. Показано положение за последние 12 месяцев.');
+}
+
+/* ── отрисовка ──────────────────────────────────────────────────── */
+function render(){
+  const d = dates[cur];
+  document.getElementById('asof').textContent =
+    'снимок на '+fmt(d)+' · цены Yahoo, отчётность EDGAR';
+  document.getElementById('tmdate').textContent = fmtM(d);
+
+  const list = NAMES.filter(([tk]) => DATA[tk]).map(([tk,nm]) => ({tk:tk, nm:nm, row:snapAt(tk)}));
+  list.sort((a,b) => {
+    const ar = a.row && a.row.r, br = b.row && b.row.r;
+    if (ar==null && br==null) return 0;
+    if (ar==null) return 1;
+    if (br==null) return -1;
+    return ar-br || b.row.q-a.row.q;
+  });
+
+  tbody.innerHTML = '';
+  for (const x of list){
+    const r = x.row, none = !r || r.q==null;
+    const tr = document.createElement('tr');
+    tr.tabIndex = 0;
+    if (sel === x.tk) tr.classList.add('sel');
+    tr.innerHTML =
+      '<td class="tick">'+x.tk+'</td>'+
+      '<td class="co">'+x.nm+'</td>'+
+      (none
+        ? '<td colspan="5" style="color:var(--ink2)">оценка не присваивается</td>'
+        : '<td><span class="qcell">'+Math.round(r.q)+
+            '<span class="qbar"><i style="width:'+r.q+'%"></i></span></span></td>'+
+          '<td>'+Math.round(r.pos)+'</td>'+
+          '<td class="grades">'+r.b.map(s => '<span>'+(s==null?'—':grade(s))+'</span>').join(' ')+'</td>'+
+          '<td><span class="qd"><i style="background:'+QD[quad(r.q,r.pos)][1]+'"></i>'+
+            QD[quad(r.q,r.pos)][0]+'</span></td>'+
+          '<td class="'+RCLS[r.r]+'">'+RATE[r.r]+'</td>')+
+      '<td class="flag">'+(none?'⚑':'')+'</td>';
+    const go = () => select(x.tk);
+    tr.addEventListener('click', go);
+    tr.addEventListener('keydown', e => {
+      if (e.key==='Enter' || e.key===' '){ e.preventDefault(); go(); }
+    });
+    tbody.appendChild(tr);
+  }
+
+  if (sel) fillCard();
+}
+
+function select(tk){
+  sel = tk;
+  document.getElementById('card').hidden = false;
+  render();
+}
+
+/* последняя смена оценки до текущего снимка */
+function lastChange(tk){
+  const S = DATA[tk], row = snapAt(tk);
+  const past = S.rows.filter(r => r.d <= row.d && r.r != null);
+  if (past.length < 2) return 'История оценок ещё короткая.';
+  const now = past[past.length-1].r;
+  for (let i=past.length-2;i>=0;i--){
+    if (past[i].r !== now){
+      const at = past[i+1];
+      let best = 0, bd = -1;
+      for (let k=0;k<5;k++){
+        const a = past[i].b[k], b = at.b[k];
+        if (a==null || b==null) continue;
+        if (Math.abs(b-a) > bd){ bd = Math.abs(b-a); best = k; }
+      }
+      const dd = at.b[best]-past[i].b[best];
+      return fmt(new Date(at.d))+': '+RATE[past[i].r]+' → '+RATE[now]+
+             '. Больше всего сдвинулся блок «'+BLOCKS[best][1]+'» ('+
+             (dd>=0?'+':'−')+Math.abs(Math.round(dd))+' к баллу).';
+    }
+  }
+  return 'Оценка '+RATE[now]+' не менялась за показанный период.';
+}
+
+function fillCard(){
+  const tk = sel, S = DATA[tk], row = snapAt(tk);
+  const nm = (NAMES.find(x => x[0]===tk) || [tk,tk])[1];
+  document.getElementById('c-nm').innerHTML = tk+' <span>· '+nm+'</span>';
+
+  const card  = document.getElementById('card');
+  const dqEl  = document.getElementById('c-dq');
+  const rtEl  = document.getElementById('c-rt');
+
+  if (!row || row.q == null){
+    rtEl.textContent = 'оценка не присваивается'; rtEl.className = 'mono';
+    document.getElementById('c-q').textContent = '—';
+    document.getElementById('c-t').textContent = '—';
+    document.getElementById('c-qd').textContent = '—';
+    document.getElementById('c-blocks').innerHTML = '';
+    document.getElementById('c-shift').hidden = true;
+    document.getElementById('c-why').hidden = true;
+    document.getElementById('c-ladder-wrap').hidden = true;
+    document.getElementById('c-map-wrap').hidden = true;
+    drawMap();
+    dqEl.hidden = false;
+    dqEl.textContent = 'Оценка не присваивается. Причина: на эту дату в отчётности ' +
+      'не хватает данных для расчёта. Оценка появится, когда наберётся достаточно ' +
+      'опубликованных кварталов.';
+    card.style.borderTopColor = 'var(--red)';
+    return;
+  }
+
+  const qd = quad(row.q, row.pos);
+  rtEl.textContent = RATE[row.r]; rtEl.className = 'mono '+RCLS[row.r];
+  document.getElementById('c-q').textContent  = Math.round(row.q)+' из 100';
+  document.getElementById('c-t').textContent  = Math.round(row.pos)+' из 100';
+  document.getElementById('c-qd').textContent = QD[qd][0];
+  card.style.borderTopColor = QD[qd][1];
+
+  document.getElementById('c-blocks').innerHTML = row.b.map((s,k) =>
+    '<div class="blk"><div class="bk">'+BLOCKS[k][1]+'</div>'+
+    '<div class="bv">'+(s==null?'нет данных':grade(s)+' · '+Math.round(s))+'</div>'+
+    '<div class="bbar"><i style="width:'+(s==null?0:s)+'%"></i></div></div>').join('');
+
+  /* как получилась оценка */
+  const sh = shiftOf(row.q, row.pos);
+  const base = RATE[baseIdx(row.q)];
+  let txt = 'Качество '+Math.round(row.q)+' даёт ступень '+base+'. ';
+  if (sh === 0) txt += 'Позиционирование '+Math.round(row.pos)+' — обычное, сдвига нет. Итог — '+RATE[row.r]+'.';
+  else if (sh < 0) txt += 'Позиционирование '+Math.round(row.pos)+' низкое: бумагой почти никто не занят, поэтому ступень вверх. Итог — '+RATE[row.r]+'.';
+  else txt += 'Позиционирование '+Math.round(row.pos)+' высокое: в бумаге уже много участников, поэтому '+
+              (sh===1?'ступень вниз':'две ступени вниз')+'. Итог — '+RATE[row.r]+'.';
+  document.getElementById('c-shift').hidden = false;
+  document.getElementById('c-shift-t').textContent = txt;
+
+  /* лестница цен */
+  const L = ladder(S, row);
+  const lw = document.getElementById('c-ladder-wrap');
+  if (!L){ lw.hidden = true; }
+  else {
+    lw.hidden = false;
+    let html = '';
+    for (let k=0;k<5;k++){
+      const b = L.band[k];
+      let range;
+      if (b.min == null) range = '<span class="lx">недостижимо при текущих показателях</span>';
+      else if (b.min <= L.lo*1.01) range = 'ниже $'+money(b.max);
+      else if (b.max >= L.hi*0.99) range = 'выше $'+money(b.min);
+      else range = '$'+money(b.min)+' — $'+money(b.max);
+      const now = (b.min!=null && L.price>=b.min && L.price<=b.max);
+      html += '<div class="lrow'+(now?' now':'')+'"><span class="lg '+RCLS[k]+'">'+RATE[k]+
+              '</span><span>'+range+'</span><span class="lnow">'+
+              (now ? 'сейчас $'+money(L.price) : '')+'</span></div>';
+    }
+    document.getElementById('c-ladder').innerHTML = html;
+  }
+
+  document.getElementById('c-why').hidden = false;
+  document.getElementById('c-why-t').textContent = lastChange(tk);
+  document.getElementById('c-map-wrap').hidden = false;
+  drawMap();
+  dqEl.hidden = true;
+}
+
+/* ── ретроспектива ──────────────────────────────────────────────── */
+tmr.addEventListener('input', () => { cur = +tmr.value; render(); });
+document.getElementById('tmnow').addEventListener('click', () => {
+  cur = dates.length-1; tmr.value = cur; render();
+});
+
+load();
+</script>
+</body>
+</html>

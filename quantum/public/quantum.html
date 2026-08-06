@@ -275,7 +275,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
         <tr>
           <th>Тикер</th><th>Компания</th><th>Качество</th><th>Позиционирование</th>
           <th>V&nbsp;·&nbsp;G&nbsp;·&nbsp;P&nbsp;·&nbsp;M&nbsp;·&nbsp;E</th>
-          <th>Положение на карте</th><th>Оценка сделки</th><th>Ограничение</th>
+          <th>Оценка сделки</th><th>Ограничение</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -331,7 +331,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 
 <div class="wingsep"><span class="w1"></span><span class="w2"></span></div>
 <div class="foot">
-  Оценка относится к сделке — покупке бумаги по текущей цене, — а не к качеству бизнеса. Оценки отражают методику HVMI и не являются индивидуальной инвестиционной рекомендацией. Они пересчитываются на каждую дату только по данным, доступным на эту дату.
+  Оценки отражают методику HVMI и не являются индивидуальной инвестиционной рекомендацией. Они пересчитываются на каждую дату только по данным, доступным на эту дату.
   <div class="cop">Helicopter View Market Intelligence · © <span id="yy"></span></div>
 </div>
 
@@ -782,13 +782,11 @@ function render(){
       '<td class="tick">'+x.tk+'</td>'+
       '<td class="co">'+x.nm+'</td>'+
       (none
-        ? '<td colspan="5" style="color:var(--ink2)">оценка не присваивается</td>'
+        ? '<td colspan="4" style="color:var(--ink2)">оценка не присваивается</td>'
         : '<td><span class="qcell">'+Math.round(r.q)+
             '<span class="qbar"><i style="width:'+r.q+'%"></i></span></span></td>'+
           '<td>'+Math.round(r.pos)+'</td>'+
           '<td class="grades">'+r.b.map(s => '<span>'+(s==null?'—':grade(s))+'</span>').join(' ')+'</td>'+
-          '<td><span class="qd"><i style="background:'+QD[quad(r.q,r.pos)][1]+'"></i>'+
-            QD[quad(r.q,r.pos)][0]+'</span></td>'+
           '<td class="'+RCLS[r.r]+'">'+RATE[r.r]+'</td>')+
       '<td class="flag">'+(none ? '⚑'
         : (r.acc ? '<span class="lim">прибыль не деньгами</span>' : ''))+'</td>';

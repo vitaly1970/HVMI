@@ -155,6 +155,7 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .qd{display:inline-flex;align-items:center;gap:6px}
 .qd i{width:8px;height:8px;flex:none}
 td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
+td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micro)}
 .tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
 
 /* ── карточка бумаги ─────────────────────────────────────────────── */
@@ -273,14 +274,14 @@ td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
       <thead>
         <tr>
           <th>Тикер</th><th>Компания</th><th>Качество</th><th>Позиционирование</th>
-          <th>О&nbsp;·&nbsp;Р&nbsp;·&nbsp;К&nbsp;·&nbsp;М&nbsp;·&nbsp;Э</th>
+          <th>V&nbsp;·&nbsp;G&nbsp;·&nbsp;P&nbsp;·&nbsp;M&nbsp;·&nbsp;E</th>
           <th>Положение на карте</th><th>Оценка сделки</th><th>Ограничение</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
-  <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. О — оценка стоимости · Р — рост · К — качество бизнеса · М — моментум · Э — реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
+  <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
 </section>
 
 <section class="scard" id="card" hidden aria-live="polite">
@@ -348,8 +349,8 @@ const NAMES = [
   ['DE','Deere'], ['ANET','Arista Networks'], ['CMG','Chipotle'], ['DECK','Deckers Outdoor']
 ];
 const BLOCKS = [
-  ['О','Оценка стоимости'], ['Р','Рост'], ['К','Качество бизнеса'],
-  ['М','Моментум'], ['Э','Реакция на отчётность']
+  ['V','Value'], ['G','Growth'], ['P','Profitability'],
+  ['M','Momentum'], ['E','Earnings Reaction']
 ];
 const RATE = ['Strong Buy','Buy','Hold','Sell','Strong Sell'];
 const RCLS = ['r-sb','r-b','r-h','r-s','r-ss'];
@@ -526,6 +527,9 @@ function build(tk, px, fu){
   const tEps = ttm(qe), tRev = ttm(qr), tNi = ttm(qn);
   const eq = instants(fu.eq);
 
+  const tCfo = ttm(quarters(fu.cfo || []));
+  const cfoD = step(days, tCfo);
+
   const epsD = step(days, tEps), revD = step(days, tRev);
   const niD  = step(days, tNi),  eqD  = step(days, eq);
   const grD  = step(days, yoy(tRev)), geD = step(days, yoy(tEps));
@@ -595,7 +599,12 @@ function build(tk, px, fu){
       if (dn != null && up != null) cv = { dn:dn, up:up };
     }
 
-    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:r, cv:cv };
+    /* Прибыль, не подтверждённая деньгами: годовой операционный поток заметно
+       меньше годовой прибыли. Оценку не отменяет — только предупреждает. */
+    const acc = (niD[i] != null && niD[i] > 0 && cfoD[i] != null && cfoD[i] < 0.6*niD[i])
+                ? { sh: cfoD[i]/niD[i] } : null;
+
+    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:r, cv:cv, acc:acc };
   });
 
   return { tk:tk, days:days, c:c, s200:s200, ep:ep, stretch:stretch, volr:volr,
@@ -781,7 +790,8 @@ function render(){
           '<td><span class="qd"><i style="background:'+QD[quad(r.q,r.pos)][1]+'"></i>'+
             QD[quad(r.q,r.pos)][0]+'</span></td>'+
           '<td class="'+RCLS[r.r]+'">'+RATE[r.r]+'</td>')+
-      '<td class="flag">'+(none?'⚑':'')+'</td>';
+      '<td class="flag">'+(none ? '⚑'
+        : (r.acc ? '<span class="lim">прибыль не деньгами</span>' : ''))+'</td>';
     const go = () => select(x.tk);
     tr.addEventListener('click', go);
     tr.addEventListener('keydown', e => {
@@ -913,7 +923,12 @@ function fillCard(){
   document.getElementById('c-why-t').textContent = lastChange(tk);
   document.getElementById('c-map-wrap').hidden = false;
   drawMap();
-  dqEl.hidden = true;
+
+  if (row.acc){
+    dqEl.hidden = false;
+    dqEl.textContent = 'Прибыль за год слабо подтверждена деньгами: операционный поток — '+
+      Math.round(row.acc.sh*100)+'% от прибыли.';
+  } else dqEl.hidden = true;
 }
 
 /* ── ретроспектива ──────────────────────────────────────────────── */

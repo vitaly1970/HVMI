@@ -27,6 +27,9 @@ const TAGS = {
   rev: ['RevenueFromContractWithCustomerExcludingAssessedTax', 'Revenues',
         'SalesRevenueNet', 'RevenueFromContractWithCustomerIncludingAssessedTax'],
   ni:  ['NetIncomeLoss'],
+  /* Операционный денежный поток — для проверки, подтверждена ли прибыль деньгами. */
+  cfo: ['NetCashProvidedByUsedInOperatingActivities',
+        'NetCashProvidedByUsedInOperatingActivitiesContinuingOperations'],
   eq:  ['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest']
 };
 

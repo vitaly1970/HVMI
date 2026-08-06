@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quantum Rating — HVMI</title>
-<meta name="description" content="Quantum Rating — оценка сделки по бумаге: качество компании и позиционирование участников, с пересчётом на любую дату прошлого.">
+<meta name="description" content="Quantum Rating — рейтинг сделки по бумаге: качество компании и позиционирование участников, с пересчётом на любую дату прошлого.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
@@ -273,7 +273,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
   <h1>Quantum Rating</h1>
   <span id="asof">снимок на —</span>
 </header>
-<p class="sub">Оценка сделки, а не качество компании · карта «Качество × Позиционирование» · тестовый набор из 8 бумаг</p>
+<p class="sub">Рейтинг сделки, а не оценка компании · карта «Качество × Позиционирование» · S&amp;P 1500</p>
 
 <section class="weather" aria-label="Сводка по списку">
   <div class="chips">
@@ -284,7 +284,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 
 <section class="sec-time">
   <div class="wing-head">
-    <span class="wing-title">История наших оценок</span>
+    <span class="wing-title">История наших рейтингов</span>
     <span class="wing-nums">период · <b id="tmspan">—</b></span>
   </div>
   <div class="tm">
@@ -294,7 +294,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
     <select class="tmsel" id="tmY" aria-label="Год"></select>
     <button id="tmnow" type="button">К текущей дате</button>
   </div>
-  <div class="tm-note">Каждый месяц с августа 2018 года мы пересчитывали рейтинги заново — по тем данным, которые были известны на тот день, без единой цифры из будущего. Потяните ползунок влево, чтобы увидеть таблицу такой, какой она была тогда, или выберите месяц и год справа. Проверьте нас: посмотрите, что система говорила год назад, и сравните с тем, что случилось потом.</div>
+  <div class="tm-note">Мы пересчитали рейтинги на каждый месяц с августа 2018 года — по данным, известным на тот день, без единой цифры из будущего. Потяните ползунок влево или выберите месяц и год справа: таблица, карта и карточка вернутся к тому дню. Проверьте нас — посмотрите, что система говорила год назад, и сравните с тем, что случилось потом.</div>
 </section>
 
 <section class="scard" id="card" hidden aria-live="polite">
@@ -315,7 +315,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
         </div>
         <div class="axis-x">Позиционирование →</div>
       </div>
-      <div class="maplegend">Положение за последние 12 месяцев</div>
+      <div class="maplegend">След — где бумага была последние 12 месяцев</div>
     </div>
     <div class="cinfo">
       <div class="grid">
@@ -325,18 +325,18 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
       </div>
       <div class="blocks" id="c-blocks"></div>
       <div class="why" id="c-shift">
-        <div class="wt">как получилась оценка сделки</div>
+        <div class="wt">как сложился рейтинг</div>
         <div id="c-shift-t">—</div>
       </div>
       <div class="ladder" id="c-ladder-wrap">
-        <div class="wt2">что изменит оценку</div>
-        <div class="lintro">Рейтинг зависит от цены: чем дороже бумага, тем хуже сделка при том же качестве бизнеса. Ниже показано, при какой цене рейтинг станет другим, если всё остальное останется прежним — та же отчётность, тот же моментум, то же позиционирование.</div>
+        <div class="wt2">что изменит рейтинг</div>
+        <div class="lintro">Цена меняет рейтинг: чем дороже бумага, тем хуже сделка при том же качестве бизнеса. Ниже — цены, при которых рейтинг станет другим, если остальное не изменится: та же отчётность, тот же моментум, то же позиционирование.</div>
         <div id="c-ladder"></div>
         <div class="convline" id="c-conv" hidden></div>
-        <div class="lnote">Границы пересчитываются каждый день вместе с отчётностью и ценой. Это не ценовая цель и не уровень для заявки.</div>
+        <div class="lnote">Границы сдвигаются каждый день вслед за ценой и отчётностью. Это не ценовая цель и не уровень для заявки.</div>
       </div>
       <div class="why" id="c-why">
-        <div class="wt">последняя смена оценки</div>
+        <div class="wt">когда рейтинг менялся в последний раз</div>
         <div id="c-why-t">—</div>
       </div>
       <div class="dq" id="c-dq" hidden></div>
@@ -346,7 +346,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 
 <section class="sec-tbl" style="margin-top:30px">
   <div class="wing-head">
-    <span class="wing-title">Оценки сделок</span>
+    <span class="wing-title">Рейтинги</span>
   </div>
   <div class="status" id="status" hidden></div>
   <div class="tbar">
@@ -371,14 +371,14 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
   </div>
   <nav class="pager" id="pager" aria-label="Страницы списка"></nav>
   <div class="srcline" id="srcline">Цены Yahoo, отчётность EDGAR.</div>
-  <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
+  <div class="tbl-legend">Рейтинг говорит о покупке бумаги по сегодняшней цене, а не о качестве бизнеса. Балл качества задаёт ступень, плотное позиционирование сдвигает её вниз. Нажмите на бумагу — откроется карточка с картой. Пять блоков: V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Блоки оцениваются буквами от A+ до F. Флажок в колонке «Ограничение» означает, что рейтинга нет; причину смотрите в карточке.</div>
 </section>
 
 
 
 <div class="wingsep"><span class="w1"></span><span class="w2"></span></div>
 <div class="foot">
-  Оценки отражают методику HVMI и не являются индивидуальной инвестиционной рекомендацией. Они пересчитываются на каждую дату только по данным, доступным на эту дату.
+  Рейтинги считаются по методике HVMI и не заменяют индивидуальную инвестиционную рекомендацию. На каждую дату мы берём только те данные, которые были доступны в тот день.
   <div class="cop">Helicopter View Market Intelligence · © <span id="yy"></span></div>
 </div>
 
@@ -745,7 +745,7 @@ async function load(){
   catch(e){
     status.hidden = false;
     status.className = 'status err';
-    status.textContent = 'Не удалось загрузить список бумаг. Обновите страницу.';
+    status.textContent = 'Список бумаг не загрузился. Обновите страницу.';
     return;
   }
   dates = IDX.dts.map(t => new Date(t));
@@ -916,7 +916,7 @@ function render(){
       '<td class="tick">'+x.tk+'</td>'+
       '<td class="co">'+x.nm+'</td>'+
       (none
-        ? '<td colspan="4" style="color:var(--ink2)">оценка не присваивается</td>'
+        ? '<td colspan="4" style="color:var(--ink2)">рейтинга нет</td>'
         : '<td><span class="qcell">'+Math.round(r.q)+
             '<span class="qbar"><i class="b'+r.r+'" style="width:'+r.q+'%"></i></span></span></td>'+
           '<td>'+Math.round(r.pos)+'</td>'+
@@ -990,7 +990,7 @@ function lastChange(tk){
   const S = DATA[tk], row = snapAt(tk);
   if (!S) return 'Загружаем историю бумаги…';
   const past = S.rows.filter(r => r.d <= row.d && r.r != null);
-  if (past.length < 2) return 'История оценок ещё короткая.';
+  if (past.length < 2) return 'История рейтингов ещё слишком короткая.';
   const now = past[past.length-1].r;
   for (let i=past.length-2;i>=0;i--){
     if (past[i].r !== now){
@@ -998,7 +998,7 @@ function lastChange(tk){
       return fmt(new Date(at.d))+': '+RATE[past[i].r]+' → '+RATE[now]+'.';
     }
   }
-  return 'Оценка '+RATE[now]+' не менялась за показанный период.';
+  return 'Рейтинг '+RATE[now]+' держится весь показанный период.';
 }
 
 function fillCard(){
@@ -1013,7 +1013,7 @@ function fillCard(){
   const rtEl  = document.getElementById('c-rt');
 
   if (!row || row.q == null){
-    rtEl.textContent = 'оценка не присваивается'; rtEl.className = 'mono';
+    rtEl.textContent = 'рейтинга нет'; rtEl.className = 'mono';
     document.getElementById('c-q').textContent = '—';
     document.getElementById('c-t').textContent = '—';
     document.getElementById('c-qd').textContent = '—';
@@ -1025,8 +1025,8 @@ function fillCard(){
     document.getElementById('c-map-wrap').hidden = true;
     drawMap();
     dqEl.hidden = false;
-    dqEl.textContent = 'Оценка не присваивается. Причина: на эту дату в отчётности ' +
-      'не хватает данных для расчёта. Оценка появится, когда наберётся достаточно ' +
+    dqEl.textContent = 'Рейтинга нет: на эту дату в отчётности ' +
+      'не хватает данных. Рейтинг появится, когда наберётся достаточно ' +
       'опубликованных кварталов.';
     card.style.borderTopColor = 'var(--red)';
     return;
@@ -1044,14 +1044,14 @@ function fillCard(){
     '<div class="bv">'+(s==null?'нет данных':grade(s)+' · '+Math.round(s))+'</div>'+
     '<div class="bbar"><i style="width:'+(s==null?0:s)+'%"></i></div></div>').join('');
 
-  /* как получилась оценка */
+  /* как сложился рейтинг */
   const sh = shiftOf(row.q, row.pos);
   const base = RATE[baseIdx(row.q)];
   let txt = 'Качество '+Math.round(row.q)+' даёт ступень '+base+'. ';
-  if (sh === 0) txt += 'Позиционирование '+Math.round(row.pos)+' — обычное, сдвига нет. Итог — '+RATE[row.r]+'.';
-  else if (sh < 0) txt += 'Позиционирование '+Math.round(row.pos)+' низкое: бумагой почти никто не занят, поэтому ступень вверх. Итог — '+RATE[row.r]+'.';
-  else txt += 'Позиционирование '+Math.round(row.pos)+' высокое: в бумаге уже много участников, поэтому '+
-              (sh===1?'ступень вниз':'две ступени вниз')+'. Итог — '+RATE[row.r]+'.';
+  if (sh === 0) txt += 'Позиционирование '+Math.round(row.pos)+' — среднее, ступень остаётся. Итог: '+RATE[row.r]+'.';
+  else if (sh < 0) txt += 'Позиционирование '+Math.round(row.pos)+' низкое — бумагу почти никто не держит, ступень поднимается. Итог: '+RATE[row.r]+'.';
+  else txt += 'Позиционирование '+Math.round(row.pos)+' высокое — участников уже много, ступень опускается'+
+              (sh===1?'' : ' сразу на две')+'. Итог: '+RATE[row.r]+'.';
   document.getElementById('c-shift').hidden = false;
   document.getElementById('c-shift-t').textContent = txt;
 
@@ -1065,7 +1065,7 @@ function fillCard(){
     for (let k=0;k<5;k++){
       const b = L.band[k];
       let range;
-      if (b.min == null) range = '<span class="lx">недостижимо при текущих показателях</span>';
+      if (b.min == null) range = '<span class="lx">при нынешних показателях недостижимо</span>';
       else if (b.min <= L.lo*1.01) range = 'ниже $'+money(b.max);
       else if (b.max >= L.hi*0.99) range = 'выше $'+money(b.min);
       else range = '$'+money(b.min)+' — $'+money(b.max);
@@ -1083,10 +1083,10 @@ function fillCard(){
   else {
     cvEl.hidden = false;
     const parts = [];
-    if (row.cv.dn !== row.r) parts.push('Прибыль ниже на 5% — оценка станет '+RATE[row.cv.dn]+'.');
+    if (row.cv.dn !== row.r) parts.push('Прибыль ниже на 5% — рейтинг станет '+RATE[row.cv.dn]+'.');
     if (row.cv.up !== row.r) parts.push('Прибыль выше на 5% — '+RATE[row.cv.up]+'.');
     cvEl.textContent = parts.length ? parts.join(' ')
-      : 'Промах по прибыли на 5% в любую сторону оценку не меняет.';
+      : 'Промах по прибыли на 5% в любую сторону рейтинг не меняет.';
   }
 
   document.getElementById('c-why').hidden = false;
@@ -1096,7 +1096,7 @@ function fillCard(){
 
   if (row.acc){
     dqEl.hidden = false;
-    dqEl.textContent = 'Прибыль за год слабо подтверждена деньгами: операционный поток — '+
+    dqEl.textContent = 'Годовая прибыль слабо подтверждена деньгами: операционный поток — '+
       Math.round(row.acc.sh*100)+'% от прибыли.';
   } else dqEl.hidden = true;
 }

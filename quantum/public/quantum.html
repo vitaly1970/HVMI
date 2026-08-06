@@ -196,6 +196,7 @@ td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
 .lrow .lg{font-weight:var(--fw-mono-em)}
 .lrow .lx{color:var(--muted)}
 .lrow.now{background:var(--card)}
+.convline{border-top:1px solid var(--rule);padding:9px 0 2px;font-size:var(--fs-body)}
 .lrow.now .lnow{color:var(--marker);font-weight:var(--fw-mono-em)}
 .lnote{font-size:var(--fs-micro);color:var(--muted);
   font-family:var(--monof);margin-top:7px}
@@ -313,8 +314,9 @@ td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
         <div id="c-shift-t">—</div>
       </div>
       <div class="ladder" id="c-ladder-wrap">
-        <div class="wt2">при какой цене оценка станет другой</div>
+        <div class="wt2">что изменит оценку</div>
         <div id="c-ladder"></div>
+        <div class="convline" id="c-conv" hidden></div>
         <div class="lnote">Границы пересчитываются каждый день вместе с отчётностью и ценой. Это не ценовая цель и не уровень для заявки.</div>
       </div>
       <div class="why" id="c-why">
@@ -563,7 +565,37 @@ function build(tk, px, fu){
     const b = [O,P,K,M,E];
     const q = b.filter(x=>x!=null).length >= 4 ? mean(b) : null;
     const pos = mean([pctRank(stretch,i,WIN), pctRank(volr,i,WIN), pctRank(up60,i,WIN)]);
-    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:(q==null||pos==null)?null:finalIdx(q,pos) };
+    const r = (q==null||pos==null) ? null : finalIdx(q,pos);
+
+    /* Устойчивость оценки: что будет, если прибыль окажется на 5% хуже или
+       лучше факта. Двигаются те блоки, которые от прибыли зависят, — оценка
+       стоимости, рост по прибыли и качество бизнеса; моментум и реакция на
+       отчётность держатся на факте. */
+    let cv = null;
+    if (r != null && epsD[i] != null && c[i] > 0){
+      const epWin = [];
+      for (let k=Math.max(0,i-WIN+1); k<=i; k++) if (ep[k]!=null) epWin.push(ep[k]);
+      const rAt = d => {
+        const eF = epsD[i] + Math.abs(epsD[i])*d;
+        const kF = epsD[i] ? eF/epsD[i] : 1;
+        const Of = rankIn(epWin, eF/c[i]);
+        const gF = geD[i]==null ? null : (1+geD[i])*kF - 1;
+        const Pf = (grD[i]==null && gF==null) ? null
+                   : mean([grD[i]==null?null:clamp(50+125*grD[i],0,100),
+                           gF==null?null:clamp(50+125*gF,0,100)]);
+        const nF = niD[i]==null ? null : niD[i] + Math.abs(niD[i])*d;
+        const roF = (nF!=null && eqD[i])  ? nF/eqD[i]  : null;
+        const maF = (nF!=null && revD[i]) ? nF/revD[i] : null;
+        const Kf = mean([roF==null?null:clamp(20+220*roF,0,100),
+                         maF==null?null:clamp(25+200*maF,0,100)]);
+        const bF = [Of,Pf,Kf,M,E];
+        return bF.filter(x=>x!=null).length >= 4 ? finalIdx(mean(bF), pos) : null;
+      };
+      const dn = rAt(-0.05), up = rAt(0.05);
+      if (dn != null && up != null) cv = { dn:dn, up:up };
+    }
+
+    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:r, cv:cv };
   });
 
   return { tk:tk, days:days, c:c, s200:s200, ep:ep, stretch:stretch, volr:volr,
@@ -809,6 +841,7 @@ function fillCard(){
     document.getElementById('c-shift').hidden = true;
     document.getElementById('c-why').hidden = true;
     document.getElementById('c-ladder-wrap').hidden = true;
+    document.getElementById('c-conv').hidden = true;
     document.getElementById('c-map-wrap').hidden = true;
     drawMap();
     dqEl.hidden = false;
@@ -862,6 +895,18 @@ function fillCard(){
               (now ? 'сейчас $'+money(L.price) : '')+'</span></div>';
     }
     document.getElementById('c-ladder').innerHTML = html;
+  }
+
+  /* устойчивость оценки к промаху по прибыли */
+  const cvEl = document.getElementById('c-conv');
+  if (!row.cv || L == null) cvEl.hidden = true;
+  else {
+    cvEl.hidden = false;
+    const parts = [];
+    if (row.cv.dn !== row.r) parts.push('Прибыль ниже на 5% — оценка станет '+RATE[row.cv.dn]+'.');
+    if (row.cv.up !== row.r) parts.push('Прибыль выше на 5% — '+RATE[row.cv.up]+'.');
+    cvEl.textContent = parts.length ? parts.join(' ')
+      : 'Промах по прибыли на 5% в любую сторону оценку не меняет.';
   }
 
   document.getElementById('c-why').hidden = false;

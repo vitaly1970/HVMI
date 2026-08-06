@@ -168,9 +168,11 @@ td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
 .sortbtn{font:inherit;color:inherit;background:transparent;border:0;padding:0;
   cursor:pointer;letter-spacing:inherit;text-transform:inherit}
 .sortbtn:hover{color:var(--ink)}
+.sortbtn::after{content:' ↕';color:var(--line)}
+.sortbtn:hover::after{color:var(--muted)}
 .sortbtn[aria-sort]{color:var(--ink);font-weight:var(--fw-bold)}
-.sortbtn[aria-sort]::after{content:' ▲'}
-.sortbtn[aria-sort="desc"]::after{content:' ▼'}
+.sortbtn[aria-sort]::after{content:' ▲';color:var(--ink)}
+.sortbtn[aria-sort="desc"]::after{content:' ▼';color:var(--ink)}
 td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micro)}
 .tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
 .srcline{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:10px}
@@ -194,6 +196,8 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 .scard[hidden]{display:none}
 .scard .head{display:flex;justify-content:space-between;align-items:baseline;
   gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.scard .cpx{font-family:var(--monof);font-size:var(--fs-display);
+  font-weight:var(--fw-bold);color:var(--ink);margin-right:auto}
 .scard .cbody{display:grid;grid-template-columns:minmax(230px,290px) 1fr;
   gap:22px;align-items:start}
 .scard .maprow{max-width:none;margin:0}
@@ -228,6 +232,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 .lrow .lx{color:var(--muted)}
 .lrow.now{background:var(--card)}
 .convline{border-top:1px solid var(--rule);padding:9px 0 2px;font-size:var(--fs-body)}
+.lintro{font-size:var(--fs-meta);color:var(--ink2);margin:2px 0 10px;line-height:1.5}
 .lrow.now .lnow{color:var(--marker);font-weight:var(--fw-mono-em)}
 .lnote{font-size:var(--fs-micro);color:var(--muted);
   font-family:var(--monof);margin-top:7px}
@@ -292,40 +297,10 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
   <div class="tm-note">Каждый месяц с августа 2018 года мы пересчитывали рейтинги заново — по тем данным, которые были известны на тот день, без единой цифры из будущего. Потяните ползунок влево, чтобы увидеть таблицу такой, какой она была тогда, или выберите месяц и год справа. Проверьте нас: посмотрите, что система говорила год назад, и сравните с тем, что случилось потом.</div>
 </section>
 
-<section class="sec-tbl" style="margin-top:30px">
-  <div class="wing-head">
-    <span class="wing-title">Оценки сделок</span>
-    <span class="wing-nums">сортировка · <b>по тикеру</b></span>
-  </div>
-  <div class="status" id="status" hidden></div>
-  <div class="tbar">
-    <input type="search" id="q" class="qbox" placeholder="Поиск по тикеру или названию" aria-label="Поиск по тикеру или названию">
-    <span class="found" id="found"></span>
-  </div>
-  <div class="tblwrap">
-    <table id="tbl">
-      <thead>
-        <tr>
-          <th><button type="button" class="sortbtn" data-k="tk">Тикер</button></th>
-          <th><button type="button" class="sortbtn" data-k="nm">Компания</button></th>
-          <th><button type="button" class="sortbtn" data-k="q">Качество сделки</button></th>
-          <th><button type="button" class="sortbtn" data-k="pos">Позиционирование</button></th>
-          <th>V&nbsp;·&nbsp;G&nbsp;·&nbsp;P&nbsp;·&nbsp;M&nbsp;·&nbsp;E</th>
-          <th><button type="button" class="sortbtn" data-k="r">Рейтинг</button></th>
-          <th>Ограничение</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <nav class="pager" id="pager" aria-label="Страницы списка"></nav>
-  <div class="srcline" id="srcline">Цены Yahoo, отчётность EDGAR.</div>
-  <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
-</section>
-
 <section class="scard" id="card" hidden aria-live="polite">
   <div class="head">
     <span class="nm" id="c-nm">—</span>
+    <span class="cpx" id="c-px"></span>
     <span class="mono" id="c-rt" style="font-size:var(--fs-body)">—</span>
   </div>
   <div class="cbody">
@@ -355,6 +330,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
       </div>
       <div class="ladder" id="c-ladder-wrap">
         <div class="wt2">что изменит оценку</div>
+        <div class="lintro">Рейтинг зависит от цены: чем дороже бумага, тем хуже сделка при том же качестве бизнеса. Ниже показано, при какой цене рейтинг станет другим, если всё остальное останется прежним — та же отчётность, тот же моментум, то же позиционирование.</div>
         <div id="c-ladder"></div>
         <div class="convline" id="c-conv" hidden></div>
         <div class="lnote">Границы пересчитываются каждый день вместе с отчётностью и ценой. Это не ценовая цель и не уровень для заявки.</div>
@@ -367,6 +343,38 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
     </div>
   </div>
 </section>
+
+<section class="sec-tbl" style="margin-top:30px">
+  <div class="wing-head">
+    <span class="wing-title">Оценки сделок</span>
+  </div>
+  <div class="status" id="status" hidden></div>
+  <div class="tbar">
+    <input type="search" id="q" class="qbox" placeholder="Поиск по тикеру или названию" aria-label="Поиск по тикеру или названию">
+    <span class="found" id="found"></span>
+  </div>
+  <div class="tblwrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th><button type="button" class="sortbtn" data-k="tk">Тикер</button></th>
+          <th><button type="button" class="sortbtn" data-k="nm">Компания</button></th>
+          <th><button type="button" class="sortbtn" data-k="q">Качество сделки</button></th>
+          <th><button type="button" class="sortbtn" data-k="pos">Позиционирование</button></th>
+          <th>V&nbsp;·&nbsp;G&nbsp;·&nbsp;P&nbsp;·&nbsp;M&nbsp;·&nbsp;E</th>
+          <th><button type="button" class="sortbtn" data-k="r">Рейтинг</button></th>
+          <th>Ограничение</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <nav class="pager" id="pager" aria-label="Страницы списка"></nav>
+  <div class="srcline" id="srcline">Цены Yahoo, отчётность EDGAR.</div>
+  <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
+</section>
+
+
 
 <div class="wingsep"><span class="w1"></span><span class="w2"></span></div>
 <div class="foot">
@@ -987,16 +995,7 @@ function lastChange(tk){
   for (let i=past.length-2;i>=0;i--){
     if (past[i].r !== now){
       const at = past[i+1];
-      let best = 0, bd = -1;
-      for (let k=0;k<5;k++){
-        const a = past[i].b[k], b = at.b[k];
-        if (a==null || b==null) continue;
-        if (Math.abs(b-a) > bd){ bd = Math.abs(b-a); best = k; }
-      }
-      const dd = at.b[best]-past[i].b[best];
-      return fmt(new Date(at.d))+': '+RATE[past[i].r]+' → '+RATE[now]+
-             '. Больше всего сдвинулся блок «'+BLOCKS[best][1]+'» ('+
-             (dd>=0?'+':'−')+Math.abs(Math.round(dd))+' к баллу).';
+      return fmt(new Date(at.d))+': '+RATE[past[i].r]+' → '+RATE[now]+'.';
     }
   }
   return 'Оценка '+RATE[now]+' не менялась за показанный период.';
@@ -1007,6 +1006,7 @@ function fillCard(){
   const full = !!S;   /* полные ряды бумаги: нужны лестнице цен и следу на карте */
   const nm = (IDX && IDX.names[tk]) || tk;
   document.getElementById('c-nm').innerHTML = tk+' <span>· '+nm+'</span>';
+  document.getElementById('c-px').textContent = row && row.px ? '$'+row.px.toFixed(2) : '';
 
   const card  = document.getElementById('card');
   const dqEl  = document.getElementById('c-dq');
@@ -1072,7 +1072,7 @@ function fillCard(){
       const now = (b.min!=null && L.price>=b.min && L.price<=b.max);
       html += '<div class="lrow'+(now?' now':'')+'"><span class="lg '+RCLS[k]+'">'+RATE[k]+
               '</span><span>'+range+'</span><span class="lnow">'+
-              (now ? 'сейчас $'+money(L.price) : '')+'</span></div>';
+              (now ? 'сейчас' : '')+'</span></div>';
     }
     document.getElementById('c-ladder').innerHTML = html;
   }

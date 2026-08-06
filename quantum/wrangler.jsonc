@@ -1,18 +1,23 @@
 {
-  // Отдельный воркер страницы Quantum Rating.
-  // Собирается из папки quantum/ репозитория vitaly1970/HVMI —
-  // в настройках сборки Cloudflare указать root directory: quantum
+  // Отдельный воркер страницы Quantum Rating. Основной сайт (hvmi-site) —
+  // свой репозиторный каталог и свой конфиг, эти два не пересекаются.
   "name": "hvmi-quantum",
+  "compatibility_date": "2026-07-29",
   "main": "worker.js",
-  "compatibility_date": "2026-06-01",
 
-  // Статика: сама страница. Запрос сначала ищется среди файлов,
-  // и только потом попадает в воркер — поэтому маршруты /api/* его достигают.
+  // Статика страницы лежит в public/: воркер отдаёт её сам,
+  // а маршруты /api/* обрабатывает кодом.
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS"
   },
 
-  "observability": {
-    "enabled": true
-  }
+  // Предрасчитанные снимки рейтинга: index.json и snap/ГГГГ-ММ.json.
+  // Считаются отдельным прогоном, страница только читает.
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "hvmi-quantum"
+    }
+  ]
 }

@@ -571,12 +571,18 @@ function build(tk, px, fu){
 }
 
 /* ── оценка сделки ──────────────────────────────────────────────── */
+/* Пороги ступеней Strong Buy / Buy / Hold / Sell (ниже последнего — Strong Sell).
+   Откалиброваны по распределению балла качества на 8-летней помесячной истории
+   набора; при расширении списка бумаг пересчитать один раз и снова заморозить. */
+const TIERS = [71, 63, 54, 43];
+
 function baseIdx(q){
-  if (q>=80) return 0; if (q>=65) return 1; if (q>=45) return 2; if (q>=30) return 3;
+  if (q>=TIERS[0]) return 0; if (q>=TIERS[1]) return 1;
+  if (q>=TIERS[2]) return 2; if (q>=TIERS[3]) return 3;
   return 4;
 }
 function shiftOf(q, pos){
-  if (pos < 35) return q >= 65 ? -1 : 0;             /* вверх — только качественные */
+  if (pos < 35) return q >= TIERS[1] ? -1 : 0;       /* вверх — только качественные */
   if (pos <= 65) return 0;
   return pos <= 85 ? 1 : 2;
 }

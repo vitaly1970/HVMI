@@ -160,6 +160,19 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
 td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micro)}
 .tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
+.tbar{display:flex;align-items:center;gap:12px;margin:10px 0 4px;flex-wrap:wrap}
+.qbox{font-family:var(--monof);font-size:var(--fs-body);color:var(--ink);
+  border:1px solid var(--line);background:transparent;padding:7px 10px;min-width:280px;border-radius:0}
+.qbox:focus-visible{outline:3px solid var(--yellow)}
+.found{font-family:var(--monof);font-size:var(--fs-micro);color:var(--muted)}
+.pager{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-top:12px;
+  font-family:var(--monof);font-size:var(--fs-meta)}
+.pager button{font:inherit;color:var(--blue);background:transparent;border:1px solid transparent;
+  padding:4px 9px;cursor:pointer;border-radius:0}
+.pager button:hover{border-color:var(--line)}
+.pager button[aria-current="true"]{background:var(--blue);color:#fff;border-color:var(--blue)}
+.pager button:disabled{color:var(--muted);cursor:default}
+.pager .gap{color:var(--muted);padding:0 2px}
 
 /* ── карточка бумаги ─────────────────────────────────────────────── */
 .scard{background:var(--card);border-top:2px solid var(--blue);
@@ -270,7 +283,11 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
     <span class="wing-title">Оценки сделок</span>
     <span class="wing-nums">сортировка · <b>по оценке сделки</b></span>
   </div>
-  <div class="status" id="status">Загрузка цен и отчётности…</div>
+  <div class="status" id="status">Загрузка данных…</div>
+  <div class="tbar">
+    <input type="search" id="q" class="qbox" placeholder="Поиск по тикеру или названию" aria-label="Поиск по тикеру или названию">
+    <span class="found" id="found"></span>
+  </div>
   <div class="tblwrap">
     <table id="tbl">
       <thead>
@@ -283,6 +300,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
       <tbody></tbody>
     </table>
   </div>
+  <nav class="pager" id="pager" aria-label="Страницы списка"></nav>
   <div class="tbl-legend">Оценка относится к покупке бумаги по сегодняшней цене, а не к качеству бизнеса: балл качества даёт ступень, а высокое позиционирование её понижает. Выберите бумагу в таблице, чтобы открыть карточку с картой. V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Оценки блоков — буквами от A+ до F. Флажок в колонке «Ограничение» означает, что оценка не присваивается; причина указана в карточке бумаги.</div>
 </section>
 
@@ -346,10 +364,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
 
 const API = '';            /* базовый адрес маршрутов — единственная строка при переезде */
 
-const NAMES = [
-  ['NVDA','NVIDIA'], ['MSFT','Microsoft'], ['COST','Costco'], ['PGR','Progressive'],
-  ['DE','Deere'], ['ANET','Arista Networks'], ['CMG','Chipotle'], ['DECK','Deckers Outdoor']
-];
+/* Список бумаг, названия и снимки приходят из предрасчёта. */
 const BLOCKS = [
   ['V','Value'], ['G','Growth'], ['P','Profitability'],
   ['M','Momentum'], ['E','Earnings Reaction']
@@ -625,7 +640,7 @@ function build(tk, px, fu){
 /* Пороги ступеней Strong Buy / Buy / Hold / Sell (ниже последнего — Strong Sell).
    Откалиброваны по распределению балла качества на 8-летней помесячной истории
    набора; при расширении списка бумаг пересчитать один раз и снова заморозить. */
-const TIERS = [71, 63, 54, 43];
+const TIERS = [68, 57, 46, 31];
 
 function baseIdx(q){
   if (q>=TIERS[0]) return 0; if (q>=TIERS[1]) return 1;
@@ -645,6 +660,7 @@ function quad(q, pos){ return q>=50 ? (pos<50?'tl':'tr') : (pos<50?'bl':'br'); }
    Моментум, рост, качество бизнеса, реакция на отчётность и объёмы держатся
    на факте — иначе лестница получается неустойчивой. */
 function ladder(S, row){
+  if (!S || row.i == null) return null;   /* полные ряды бумаги ещё не пришли */
   const i = row.i;
   if (row.q == null || S.epsD[i] == null || !S.s200[i]) return null;
 
@@ -681,6 +697,10 @@ function ladder(S, row){
 /* ── состояние ──────────────────────────────────────────────────── */
 const DATA = {};
 let dates = [], cur = 0, sel = null;
+let IDX = null;          /* месяцы, медиана P/E рынка, названия компаний */
+let ROW = {};            /* строки выбранного месяца: тикер → снимок */
+let page = 0, qtext = '';
+const PAGE = 50;
 
 const map    = document.getElementById('map');
 const tbody  = document.querySelector('#tbl tbody');
@@ -699,44 +719,57 @@ async function j(u){
   return r.json();
 }
 async function load(){
-  const bad = [];
-  let done = 0;
-  await Promise.all(NAMES.map(async ([tk]) => {
-    try {
-      const [px,fu] = await Promise.all([j('/api/px?t='+tk), j('/api/fund?t='+tk)]);
-      DATA[tk] = build(tk, px, fu);
-    } catch(e){ console.error(tk, e); bad.push(tk+' ('+e.message+')'); }
-    done++;
-    status.textContent = 'Загрузка данных: '+done+' из '+NAMES.length+'…';
-  }));
-
-  const ok = Object.keys(DATA);
-  if (!ok.length){
+  try { IDX = await j('/api/months'); }
+  catch(e){
     status.className = 'status err';
-    status.textContent = 'Нет данных. Нажмите «Обновить страницу» — источник мог не ответить.';
+    status.textContent = 'Не удалось загрузить список бумаг. Обновите страницу.';
     return;
   }
-
-  /* общая шкала дат — по бумаге с самой длинной историей снимков */
-  let ref = DATA[ok[0]];
-  for (const k of ok) if (DATA[k].rows.length > ref.rows.length) ref = DATA[k];
-  dates = ref.rows.map(r => new Date(r.d));
-  cur = dates.length-1;
+  dates = IDX.dts.map(t => new Date(t));
+  cur = dates.length - 1;
   tmr.max = cur; tmr.value = cur;
   tmpick.min = isoM(dates[0]); tmpick.max = isoM(dates[cur]);
   document.getElementById('tmspan').textContent = fmtM(dates[0])+' — '+fmtM(dates[cur]);
+  await loadMonth();
+}
 
-  status.textContent = bad.length
-    ? 'Не загрузились: '+bad.join(', ')+'. Остальные бумаги посчитаны.'
-    : 'Данные загружены: цены Yahoo, отчётность EDGAR.';
-  if (bad.length) status.className = 'status err';
-
+/* Строки месяца приходят готовыми. Приводим их к тому же виду, в котором
+   расчёт отдаёт снимок бумаги, — дальше вся отрисовка общая. */
+async function loadMonth(){
+  const key = IDX.months[cur];
+  status.className = 'status';
+  status.textContent = 'Загрузка снимка на '+fmtM(dates[cur])+'…';
+  let rows;
+  try { rows = await j('/api/snap?m='+key); }
+  catch(e){
+    status.className = 'status err';
+    status.textContent = 'Снимок на '+fmtM(dates[cur])+' не загрузился.';
+    ROW = {}; render(); return;
+  }
+  ROW = {};
+  for (const r of rows){
+    ROW[r.t] = { d: dates[cur].getTime(), px: r.px, q: r.q, pos: r.p, b: r.b, r: r.r,
+                 cv: r.cv ? { dn:r.cv[0], up:r.cv[1] } : null,
+                 acc: r.ac == null ? null : { sh: r.ac } };
+  }
+  status.textContent = 'Данные загружены: цены Yahoo, отчётность EDGAR. Бумаг в списке: '+rows.length+'.';
   render();
+}
+
+/* Полные ряды бумаги нужны только для карточки, лестницы цен и следа на
+   карте — грузим их по клику, а не для всего списка. */
+async function loadOne(tk){
+  if (DATA[tk]) return true;
+  try {
+    const [px,fu] = await Promise.all([j('/api/px?t='+tk), j('/api/fund?t='+tk)]);
+    DATA[tk] = build(tk, px, fu);
+    return true;
+  } catch(e){ console.error(tk, e); return false; }
 }
 
 /* снимок бумаги, ближайший к выбранной дате и не позже неё */
 function snapAt(tk){
-  const S = DATA[tk]; if (!S) return null;
+  const S = DATA[tk]; if (!S) return ROW[tk] || null;
   const t = dates[cur].getTime();
   let out = null;
   for (const r of S.rows){ if (r.d <= t) out = r; else break; }
@@ -750,7 +783,7 @@ function drawMap(){
   const S = DATA[sel]; const row = snapAt(sel);
   if (!row || row.q == null) return;
 
-  const hist = S.rows.filter(r => r.d <= row.d && r.q != null).slice(-13, -1);
+  const hist = S ? S.rows.filter(r => r.d <= row.d && r.q != null).slice(-13, -1) : [];
   hist.forEach((r,k) => {
     const s = document.createElement('span');
     s.className = 'trail';
@@ -811,7 +844,13 @@ function render(){
     'снимок на '+fmt(d)+' · цены Yahoo, отчётность EDGAR';
   tmpick.value = isoM(d);
 
-  const list = NAMES.filter(([tk]) => DATA[tk]).map(([tk,nm]) => ({tk:tk, nm:nm, row:snapAt(tk)}));
+  const all = Object.keys(ROW).map(tk => ({tk:tk, nm:(IDX.names[tk]||tk), row:ROW[tk]}));
+  drawWeather(all);
+
+  const qq = qtext.trim().toLowerCase();
+  const list = qq
+    ? all.filter(x => x.tk.toLowerCase().includes(qq) || x.nm.toLowerCase().includes(qq))
+    : all;
   list.sort((a,b) => {
     const ar = a.row && a.row.r, br = b.row && b.row.r;
     if (ar==null && br==null) return 0;
@@ -820,10 +859,15 @@ function render(){
     return ar-br || b.row.q-a.row.q;
   });
 
-  drawWeather(list);
+  const pages = Math.max(1, Math.ceil(list.length/PAGE));
+  if (page >= pages) page = pages-1;
+  const shown = list.slice(page*PAGE, page*PAGE+PAGE);
+  document.getElementById('found').textContent = qq
+    ? 'найдено: '+list.length
+    : 'бумаг в списке: '+list.length;
 
   tbody.innerHTML = '';
-  for (const x of list){
+  for (const x of shown){
     const r = x.row, none = !r || r.q==null;
     const tr = document.createElement('tr');
     tr.tabIndex = 0;
@@ -847,19 +891,64 @@ function render(){
     });
     tbody.appendChild(tr);
   }
+  if (!shown.length){
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="7" style="color:var(--ink2)">Ничего не найдено.</td>';
+    tbody.appendChild(tr);
+  }
+  drawPager(pages);
 
   if (sel) fillCard();
 }
 
-function select(tk){
+/* Листалка в духе привычных скринеров: края, соседи текущей и многоточия. */
+function drawPager(pages){
+  const el = document.getElementById('pager');
+  el.innerHTML = '';
+  if (pages < 2) return;
+  const btn = (label, to, cur) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (cur) b.setAttribute('aria-current','true');
+    if (to == null) b.disabled = true;
+    else b.addEventListener('click', () => {
+      page = to; render();
+      const t = document.getElementById('tbl');
+      if (t.scrollIntoView) t.scrollIntoView({ block:'start' });
+    });
+    el.appendChild(b);
+  };
+  const gap = () => { const g = document.createElement('span'); g.className='gap'; g.textContent='…'; el.appendChild(g); };
+  btn('←', page > 0 ? page-1 : null);
+  const marks = new Set([0, pages-1, page-1, page, page+1]);
+  for (let k=1; k<6 && k<pages; k++) marks.add(k);
+  const step = pages > 120 ? 100 : pages > 40 ? 20 : 10;
+  for (let k=step; k<pages; k+=step) marks.add(k);
+  const nums = [...marks].filter(k => k >= 0 && k < pages).sort((a,b) => a-b);
+  let prev = -1;
+  for (const k of nums){
+    if (k - prev > 1) gap();
+    btn(String(k+1), k, k === page);
+    prev = k;
+  }
+  btn('→', page < pages-1 ? page+1 : null);
+}
+
+async function select(tk){
   sel = tk;
   document.getElementById('card').hidden = false;
   render();
+  if (!DATA[tk]){
+    const ok = await loadOne(tk);
+    if (sel === tk) render();
+    if (!ok) console.warn('ряды бумаги '+tk+' не загрузились');
+  }
 }
 
 /* последняя смена оценки до текущего снимка */
 function lastChange(tk){
   const S = DATA[tk], row = snapAt(tk);
+  if (!S) return 'Загружаем историю бумаги…';
   const past = S.rows.filter(r => r.d <= row.d && r.r != null);
   if (past.length < 2) return 'История оценок ещё короткая.';
   const now = past[past.length-1].r;
@@ -883,7 +972,8 @@ function lastChange(tk){
 
 function fillCard(){
   const tk = sel, S = DATA[tk], row = snapAt(tk);
-  const nm = (NAMES.find(x => x[0]===tk) || [tk,tk])[1];
+  const full = !!S;   /* полные ряды бумаги: нужны лестнице цен и следу на карте */
+  const nm = (IDX && IDX.names[tk]) || tk;
   document.getElementById('c-nm').innerHTML = tk+' <span>· '+nm+'</span>';
 
   const card  = document.getElementById('card');
@@ -980,9 +1070,12 @@ function fillCard(){
 }
 
 /* ── ретроспектива ──────────────────────────────────────────────── */
-tmr.addEventListener('input', () => { cur = +tmr.value; render(); });
+tmr.addEventListener('input', () => { cur = +tmr.value; page = 0; loadMonth(); });
 /* Ввод месяца напрямую. Снимки помесячные, поэтому берём ближайший
    имеющийся: если такого месяца в истории нет, поле вернётся к нему само. */
+document.getElementById('q').addEventListener('input', e => {
+  qtext = e.target.value; page = 0; render();
+});
 tmpick.addEventListener('change', () => {
   const m = /^(\d{4})-(\d{2})$/.exec(tmpick.value);
   if (!m || !dates.length){ tmpick.value = isoM(dates[cur]); return; }
@@ -992,10 +1085,10 @@ tmpick.addEventListener('change', () => {
     const d = dates[i], g = Math.abs(d.getFullYear()*12 + d.getMonth() - want);
     if (g < gap){ gap = g; best = i; }
   }
-  cur = best; tmr.value = cur; render();
+  cur = best; tmr.value = cur; page = 0; loadMonth();
 });
 document.getElementById('tmnow').addEventListener('click', () => {
-  cur = dates.length-1; tmr.value = cur; render();
+  cur = dates.length-1; tmr.value = cur; page = 0; loadMonth();
 });
 
 load();

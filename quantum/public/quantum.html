@@ -174,6 +174,7 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .sortbtn[aria-sort]::after{content:' ▲';color:var(--ink)}
 .sortbtn[aria-sort="desc"]::after{content:' ▼';color:var(--ink)}
 .tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
+.tblnote{font-size:var(--fs-meta);color:var(--ink2);margin-top:8px;font-family:var(--monof)}
 .srcline{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:10px}
 .tbar{display:flex;align-items:center;gap:12px;margin:10px 0 4px;flex-wrap:wrap}
 .qbox{font-family:var(--monof);font-size:var(--fs-body);color:var(--ink);
@@ -197,6 +198,10 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
   gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .scard .cpx{font-family:var(--monof);font-size:var(--fs-display);
   font-weight:var(--fw-bold);color:var(--ink);margin-right:auto}
+.scard .cclose{font:inherit;font-size:26px;line-height:1;color:var(--muted);
+  background:transparent;border:0;padding:0 2px;margin-left:14px;cursor:pointer;border-radius:0}
+.scard .cclose:hover{color:var(--ink)}
+.scard .cclose:focus-visible{outline:3px solid var(--yellow)}
 .scard .cbody{display:grid;grid-template-columns:minmax(230px,290px) 1fr;
   gap:22px;align-items:start}
 .scard .maprow{max-width:none;margin:0}
@@ -301,6 +306,7 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
     <span class="nm" id="c-nm">—</span>
     <span class="cpx" id="c-px"></span>
     <span class="mono" id="c-rt" style="font-size:var(--fs-body)">—</span>
+    <button type="button" class="cclose" id="c-close" aria-label="Закрыть карточку">×</button>
   </div>
   <div class="cbody">
     <div class="cmap" id="c-map-wrap">
@@ -347,6 +353,7 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
   <div class="wing-head">
     <span class="wing-title">Рейтинги</span>
   </div>
+  <div class="tblnote">Нажмите на строку — откроется карточка компании: карта, разбор рейтинга, лестница цен и история.</div>
   <div class="status" id="status" hidden></div>
   <div class="tbar">
     <input type="search" id="q" class="qbox" placeholder="Поиск по тикеру или названию" aria-label="Поиск по тикеру или названию">
@@ -986,8 +993,12 @@ function drawPager(pages){
 
 async function select(tk){
   sel = tk;
-  document.getElementById('card').hidden = false;
+  const card = document.getElementById('card');
+  card.hidden = false;
   render();
+  /* Карточка стоит выше списка, и при клике по дальней строке её легко не
+     заметить — подводим к ней сами. */
+  if (card.scrollIntoView) card.scrollIntoView({ behavior:'smooth', block:'start' });
   if (!DATA[tk]){
     const ok = await loadOne(tk);
     if (sel === tk) render();
@@ -1134,6 +1145,17 @@ for (const b of document.querySelectorAll('.sortbtn')){
     page = 0; render();
   });
 }
+function closeCard(){
+  if (!sel) return;
+  const tbl = document.getElementById('tbl');
+  sel = null;
+  document.getElementById('card').hidden = true;
+  render();
+  if (tbl.scrollIntoView) tbl.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+document.getElementById('c-close').addEventListener('click', closeCard);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCard(); });
+
 document.getElementById('q').addEventListener('input', e => {
   qtext = e.target.value; page = 0; render();
 });

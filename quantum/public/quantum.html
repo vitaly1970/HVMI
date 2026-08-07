@@ -158,13 +158,13 @@ td.co{color:var(--ink2);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 .qbar i.b2{background:var(--yellow)}
 .qbar i.b3{background:var(--orange)}
 .qbar i.b4{background:var(--red)}
-.grades span{display:inline-block;min-width:20px}
 .r-sb,.r-b{color:var(--ok);font-weight:var(--fw-mono-em)}
 .r-h{color:var(--ink2)}
 .r-s,.r-ss{color:var(--red);font-weight:var(--fw-mono-em)}
+.dl{font-weight:var(--fw-mono-em);font-size:var(--fs-body)}
+.dlab{color:var(--muted);font-size:var(--fs-micro);margin-left:7px}
 .qd{display:inline-flex;align-items:center;gap:6px}
 .qd i{width:8px;height:8px;flex:none}
-td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
 .sortbtn{font:inherit;color:inherit;background:transparent;border:0;padding:0;
   cursor:pointer;letter-spacing:inherit;text-transform:inherit}
 .sortbtn:hover{color:var(--ink)}
@@ -173,7 +173,6 @@ td.flag{color:var(--red);font-weight:var(--fw-mono-em)}
 .sortbtn[aria-sort]{color:var(--ink);font-weight:var(--fw-bold)}
 .sortbtn[aria-sort]::after{content:' ▲';color:var(--ink)}
 .sortbtn[aria-sort="desc"]::after{content:' ▼';color:var(--ink)}
-td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micro)}
 .tbl-legend{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:8px}
 .srcline{font-size:var(--fs-micro);color:var(--muted);font-family:var(--monof);margin-top:10px}
 .tbar{display:flex;align-items:center;gap:12px;margin:10px 0 4px;flex-wrap:wrap}
@@ -361,9 +360,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
           <th><button type="button" class="sortbtn" data-k="nm">Компания</button></th>
           <th><button type="button" class="sortbtn" data-k="q">Качество сделки</button></th>
           <th><button type="button" class="sortbtn" data-k="pos">Позиционирование</button></th>
-          <th>V&nbsp;·&nbsp;G&nbsp;·&nbsp;P&nbsp;·&nbsp;M&nbsp;·&nbsp;E</th>
-          <th><button type="button" class="sortbtn" data-k="r">Рейтинг</button></th>
-          <th>Ограничение</th>
+          <th><button type="button" class="sortbtn" data-k="dl">Рейтинг</button></th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -371,7 +368,7 @@ td.flag .lim{color:var(--ink2);font-weight:var(--fw-reg);font-size:var(--fs-micr
   </div>
   <nav class="pager" id="pager" aria-label="Страницы списка"></nav>
   <div class="srcline" id="srcline">Цены Yahoo, отчётность EDGAR.</div>
-  <div class="tbl-legend">Рейтинг говорит о покупке бумаги по сегодняшней цене, а не о качестве бизнеса. Балл качества задаёт ступень, плотное позиционирование сдвигает её вниз. Нажмите на бумагу — откроется карточка с картой. Пять блоков: V — Value, оценка стоимости · G — Growth, рост · P — Profitability, качество бизнеса · M — Momentum, моментум · E — Earnings Reaction, реакция на отчётность. Блоки оцениваются буквами от A+ до F. Флажок в колонке «Ограничение» означает, что рейтинга нет; причину смотрите в карточке.</div>
+  <div class="tbl-legend">Рейтинг говорит о покупке бумаги по сегодняшней цене, а не о качестве бизнеса. Балл качества задаёт ступень, плотное позиционирование сдвигает её вниз. Нажмите на бумагу — откроется карточка с картой.</div>
 </section>
 
 
@@ -648,7 +645,7 @@ function build(tk, px, fu){
     const acc = (niD[i] != null && niD[i] > 0 && cfoD[i] != null && cfoD[i] < 0.6*niD[i])
                 ? { sh: cfoD[i]/niD[i] } : null;
 
-    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:r, cv:cv, acc:acc };
+    return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:r, dl:(q==null||pos==null)?null:dealScore(q,pos), cv:cv, acc:acc };
   });
 
   return { tk:tk, days:days, c:c, s200:s200, ep:ep, stretch:stretch, volr:volr,
@@ -666,12 +663,26 @@ function baseIdx(q){
   if (q>=TIERS[2]) return 2; if (q>=TIERS[3]) return 3;
   return 4;
 }
-function shiftOf(q, pos){
-  if (pos < 35) return q >= TIERS[1] ? -1 : 0;       /* вверх — только качественные */
-  if (pos <= 65) return 0;
-  return pos <= 85 ? 1 : 2;
+/* Балл сделки: качество компании за вычетом штрафа за плотность позиционирования.
+   Штраф — сглаженная версия прежней ступенчатой поправки: сохранены те же
+   опорные точки, но между ними шкала непрерывна, поэтому бумага у границы
+   ступени больше не перескакивает туда-сюда от округления. Ширина ступени
+   TIER_W — цена одного шага по шкале ярлыков. */
+const TIER_W = 11;
+const PEN = [[0,-1.0],[35,-0.5],[50,0],[65,0.5],[85,1.4],[100,2.0]];
+
+function penalty(pos){
+  for (let i=1;i<PEN.length;i++){
+    const [x0,y0] = PEN[i-1], [x1,y1] = PEN[i];
+    if (pos <= x1) return TIER_W * (y0 + (y1-y0)*(pos-x0)/(x1-x0));
+  }
+  return TIER_W * 2;
 }
-function finalIdx(q, pos){ return clamp(baseIdx(q)+shiftOf(q,pos), 0, 4); }
+function dealScore(q, pos){
+  if (q == null || pos == null) return null;
+  return clamp(q - penalty(pos), 0, 100);
+}
+function finalIdx(q, pos){ return baseIdx(dealScore(q, pos)); }
 function quad(q, pos){ return q>=50 ? (pos<50?'tl':'tr') : (pos<50?'bl':'br'); }
 
 /* ── лестница цен ───────────────────────────────────────────────── */
@@ -771,7 +782,7 @@ async function loadMonth(){
   }
   ROW = {};
   for (const r of rows){
-    ROW[r.t] = { d: dates[cur].getTime(), px: r.px, q: r.q, pos: r.p, b: r.b, r: r.r,
+    ROW[r.t] = { d: dates[cur].getTime(), px: r.px, q: r.q, pos: r.p, b: r.b, r: r.r, dl: r.ds,
                  cv: r.cv ? { dn:r.cv[0], up:r.cv[1] } : null,
                  acc: r.ac == null ? null : { sh: r.ac } };
   }
@@ -916,14 +927,13 @@ function render(){
       '<td class="tick">'+x.tk+'</td>'+
       '<td class="co">'+x.nm+'</td>'+
       (none
-        ? '<td colspan="4" style="color:var(--ink2)">рейтинга нет</td>'
+        ? '<td colspan="3" style="color:var(--ink2)">рейтинга нет</td>'
         : '<td><span class="qcell">'+Math.round(r.q)+
             '<span class="qbar"><i class="b'+r.r+'" style="width:'+r.q+'%"></i></span></span></td>'+
           '<td>'+Math.round(r.pos)+'</td>'+
-          '<td class="grades">'+r.b.map(s => '<span>'+(s==null?'—':grade(s))+'</span>').join(' ')+'</td>'+
-          '<td class="'+RCLS[r.r]+'">'+RATE[r.r]+'</td>')+
-      '<td class="flag">'+(none ? '⚑'
-        : (r.acc ? '<span class="lim">прибыль не деньгами</span>' : ''))+'</td>';
+          '<td><span class="dl '+RCLS[r.r]+'">'+Math.round(r.dl)+'</span>'+
+            '<span class="dlab">'+RATE[r.r]+'</span></td>')+
+      '';
     const go = () => select(x.tk);
     tr.addEventListener('click', go);
     tr.addEventListener('keydown', e => {
@@ -933,7 +943,7 @@ function render(){
   }
   if (!shown.length){
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="7" style="color:var(--ink2)">Ничего не найдено.</td>';
+    tr.innerHTML = '<td colspan="5" style="color:var(--ink2)">Ничего не найдено.</td>';
     tbody.appendChild(tr);
   }
   drawPager(pages);
@@ -1007,6 +1017,7 @@ function fillCard(){
   const nm = (IDX && IDX.names[tk]) || tk;
   document.getElementById('c-nm').innerHTML = tk+' <span>· '+nm+'</span>';
   document.getElementById('c-px').textContent = row && row.px ? '$'+row.px.toFixed(2) : '';
+  const dl = row && row.dl != null ? row.dl : (row ? dealScore(row.q, row.pos) : null);
 
   const card  = document.getElementById('card');
   const dqEl  = document.getElementById('c-dq');
@@ -1033,7 +1044,9 @@ function fillCard(){
   }
 
   const qd = quad(row.q, row.pos);
-  rtEl.textContent = RATE[row.r]; rtEl.className = 'mono '+RCLS[row.r];
+  rtEl.innerHTML = '<span class="dl">'+Math.round(dl)+'</span>'+
+    '<span class="dlab">'+RATE[row.r]+'</span>';
+  rtEl.className = 'mono '+RCLS[row.r];
   document.getElementById('c-q').textContent  = Math.round(row.q)+' из 100';
   document.getElementById('c-t').textContent  = Math.round(row.pos)+' из 100';
   document.getElementById('c-qd').textContent = QD[qd][0];
@@ -1045,13 +1058,14 @@ function fillCard(){
     '<div class="bbar"><i style="width:'+(s==null?0:s)+'%"></i></div></div>').join('');
 
   /* как сложился рейтинг */
-  const sh = shiftOf(row.q, row.pos);
-  const base = RATE[baseIdx(row.q)];
-  let txt = 'Качество '+Math.round(row.q)+' даёт ступень '+base+'. ';
-  if (sh === 0) txt += 'Позиционирование '+Math.round(row.pos)+' — среднее, ступень остаётся. Итог: '+RATE[row.r]+'.';
-  else if (sh < 0) txt += 'Позиционирование '+Math.round(row.pos)+' низкое — бумагу почти никто не держит, ступень поднимается. Итог: '+RATE[row.r]+'.';
-  else txt += 'Позиционирование '+Math.round(row.pos)+' высокое — участников уже много, ступень опускается'+
-              (sh===1?'' : ' сразу на две')+'. Итог: '+RATE[row.r]+'.';
+  const pen = penalty(row.pos);
+  let txt = 'Качество компании — '+Math.round(row.q)+' из 100. ';
+  if (Math.abs(pen) < 1) txt += 'Позиционирование '+Math.round(row.pos)+' среднее, надбавки и скидки нет. ';
+  else if (pen < 0) txt += 'Позиционирование '+Math.round(row.pos)+' низкое — бумагу мало кто держит, и балл сделки прибавляет '+
+                           Math.round(-pen)+'. ';
+  else txt += 'Позиционирование '+Math.round(row.pos)+' высокое — участников уже много, и балл сделки теряет '+
+              Math.round(pen)+'. ';
+  txt += 'Итог: '+Math.round(row.dl != null ? row.dl : dealScore(row.q,row.pos))+' из 100, это '+RATE[row.r]+'.';
   document.getElementById('c-shift').hidden = false;
   document.getElementById('c-shift-t').textContent = txt;
 
@@ -1111,7 +1125,7 @@ for (const b of document.querySelectorAll('.sortbtn')){
     /* по числам первым кликом показываем лучшее сверху: рейтинг — по возрастанию
        (Strong Buy = 0), качество — по убыванию */
     if (sortK === k) sortDesc = !sortDesc;
-    else { sortK = k; sortDesc = (k === 'q' || k === 'pos'); }
+    else { sortK = k; sortDesc = (k === 'q' || k === 'pos' || k === 'dl'); }
     page = 0; render();
   });
 }

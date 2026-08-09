@@ -570,7 +570,12 @@ function build(tk, px, fu){
   const splits = (px.sp || []).map(x => ({ t:x[0]*1000, r:x[1] })).sort((a,b)=>a.t-b.t);
   const perShare = ms => { let f=1; for (const s of splits) if (s.t > ms) f *= s.r; return f; };
 
-  const qe = quarters(fu.eps).map(x => ({ e:x.e, f:x.f, v:x.v/perShare(x.e) }));
+  /* Поправка на дробления — ДО восстановления кварталов из нарастающих
+     итогов. Иначе на границе дробления вычитание смешивает единицы: годовая
+     прибыль на акцию уже в новых бумагах, девятимесячная ещё в старых, и
+     восстановленный четвёртый квартал выходит отрицательным (пример —
+     ServiceNow, дробление 18.12.2025). */
+  const qe = quarters((fu.eps || []).map(r => [r[0], r[1], r[2], r[3]/perShare(Date.parse(r[1]))]));
   const qr = quarters(fu.rev), qn = quarters(fu.ni);
   const tEps = ttm(qe), tRev = ttm(qr), tNi = ttm(qn);
   const eq = instants(fu.eq);
@@ -582,8 +587,19 @@ function build(tk, px, fu){
   const niD  = step(days, tNi),  eqD  = step(days, eq);
   const grD  = step(days, yoy(tRev)), geD = step(days, yoy(tEps));
 
-  const ep = new Array(n).fill(null);                /* прибыль на цену */
-  for (let i=0;i<n;i++) if (epsD[i]!=null && c[i]>0) ep[i] = epsD[i]/c[i];
+  /* Денежный поток на акцию: числа акций в данных нет, поэтому он выводится
+     из пары прибыль всего / прибыль на акцию (cfo · eps / ni). Работает и при
+     убытке — знаки ni и eps совпадают, частное положительно. */
+  const cps = new Array(n).fill(null);
+  for (let i=0;i<n;i++)
+    if (cfoD[i]!=null && epsD[i]!=null && niD[i]!=null && niD[i]*epsD[i] > 0)
+      cps[i] = cfoD[i]*epsD[i]/niD[i];
+
+  /* Блок Value считается по денежному потоку, а не по прибыли: GAAP-прибыль
+     ломается амортизацией после крупных покупок (пример — ServiceNow после
+     Armis), поток от операций этой поломке не подвержен. */
+  const ep = new Array(n).fill(null);                /* поток на цену */
+  for (let i=0;i<n;i++) if (cps[i]!=null && c[i]>0) ep[i] = cps[i]/c[i];
 
   /* реакция цены на публикацию отчёта */
   const react = [];
@@ -630,7 +646,9 @@ function build(tk, px, fu){
       const rAt = d => {
         const eF = epsD[i] + Math.abs(epsD[i])*d;
         const kF = epsD[i] ? eF/epsD[i] : 1;
-        const Of = rankIn(epWin, eF/c[i]);
+        /* поток двигаем той же долей, что и прибыль */
+        const cF = cps[i] == null ? null : cps[i] + Math.abs(cps[i])*d;
+        const Of = cF == null ? null : rankIn(epWin, cF/c[i]);
         const gF = geD[i]==null ? null : (1+geD[i])*kF - 1;
         const Pf = (grD[i]==null && gF==null) ? null
                    : mean([grD[i]==null?null:clamp(50+125*grD[i],0,100),
@@ -655,7 +673,7 @@ function build(tk, px, fu){
     return { i:i, d:days[i], px:c[i], b:b, q:q, pos:pos, r:r, dl:(q==null||pos==null)?null:dealScore(q,pos), cv:cv, acc:acc };
   });
 
-  return { tk:tk, days:days, c:c, s200:s200, ep:ep, stretch:stretch, volr:volr,
+  return { tk:tk, days:days, c:c, s200:s200, ep:ep, cps:cps, stretch:stretch, volr:volr,
            up60:up60, epsD:epsD, rows:rows };
 }
 
@@ -663,7 +681,7 @@ function build(tk, px, fu){
 /* Пороги ступеней Strong Buy / Buy / Hold / Sell (ниже последнего — Strong Sell).
    Откалиброваны по распределению балла качества на 8-летней помесячной истории
    набора; при расширении списка бумаг пересчитать один раз и снова заморозить. */
-const TIERS = [68, 57, 46, 31];
+const TIERS = [66, 56, 46, 34];
 
 function baseIdx(q){
   if (q>=TIERS[0]) return 0; if (q>=TIERS[1]) return 1;
@@ -699,7 +717,7 @@ function quad(q, pos){ return q>=50 ? (pos<50?'tl':'tr') : (pos<50?'bl':'br'); }
 function ladder(S, row){
   if (!S || row.i == null) return null;   /* полные ряды бумаги ещё не пришли */
   const i = row.i;
-  if (row.q == null || S.epsD[i] == null || !S.s200[i]) return null;
+  if (row.q == null || S.cps[i] == null || !S.s200[i]) return null;
 
   const epWin = [], stWin = [];
   for (let k=Math.max(0,i-WIN+1); k<=i; k++){
@@ -709,11 +727,11 @@ function ladder(S, row){
   const volR = pctRank(S.volr,i,WIN), upR = pctRank(S.up60,i,WIN);
   if (volR==null || upR==null) return null;
 
-  const eps = S.epsD[i], s2 = S.s200[i];
+  const cps = S.cps[i], s2 = S.s200[i];
   const fixed = [row.b[1], row.b[2], row.b[3], row.b[4]];
 
   const at = p => {
-    const O = rankIn(epWin, eps/p);
+    const O = rankIn(epWin, cps/p);
     const pos = (rankIn(stWin, p/s2-1) + volR + upR)/3;
     const q = mean([O].concat(fixed));
     return finalIdx(q, pos);

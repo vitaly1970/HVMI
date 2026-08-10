@@ -279,8 +279,9 @@ const TAGS = {
   eq:  ['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest']
 };
 
-const TTL = { px: 3600, fund: 86400, snap: 21600 };
-/* цены — час, отчётность — сутки, снимки — шесть часов (пересчёт редкий) */
+const TTL = { px: 3600, fund: 86400, snap: 300 };
+/* цены — час, отчётность — сутки, снимки — пять минут:
+   после перезаливки снимков в R2 обновление приходит само, без ручного сброса кэша */
 
 export default {
   async fetch(req, env, ctx) {

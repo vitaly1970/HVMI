@@ -157,7 +157,7 @@ footer .mark img{height:17px}
   <details><summary>Связь с модулем barbell</summary><p>Сигнал выхода в SGOV главнее всех правил здесь. При недельном закрытии QQQ ниже 10% от максимума в тот же день выкупаются все колы и продаётся хедж. Пока хедж открыт, доля TQQQ выше плановой — это допустимо на срок до экспирации, не дольше.</p></details>
   <details><summary>События</summary><p>Новый кол не открывается, если внутри его срока заседание ФРС, публикация данных по инфляции или отчёт NVIDIA.</p></details>
   <details><summary>Учёт</summary><p>Каждый цикл фиксируется в журнале: дата, страйк, премия, был ли хедж, итог. Оценка стратегии возможна после пятнадцати циклов.</p></details>
-  <details><summary>Ограничения</summary><p>Уровень выхода из хеджа и правило одного повторного входа заданы по логике, а не по расчёту на исторических данных. Котировки приходят с задержкой около пятнадцати минут. Размеры заявок приходят из цепочки CBOE и обновляются вместе с ней.</p></details>
+  <details><summary>Ограничения</summary><p>Уровень выхода из хеджа и правило одного повторного входа заданы по логике, а не по расчёту на исторических данных. Котировки приходят с задержкой около пятнадцати минут. Размеры заявок приходят из цепочки CBOE и обновляются вместе с ней. CBOE отбивает запросы из некоторых стран; в этом случае страница берёт цепочку через ретранслятор, у которого есть ограничение по частоте запросов.</p></details>
 </section>
 
 <dialog id="dlg">
@@ -213,7 +213,15 @@ function evList(){return (CFG.ev||'').split('\n').map(function(s){return s.trim(
 
 var CBOE='https://cdn.cboe.com/api/global/delayed_quotes/options/TQQQ.json';
 var YQQQ='https://query2.finance.yahoo.com/v8/finance/chart/QQQ?range=1y&interval=1d';
-function prox(target){return fetch(CFG.api+'?url='+encodeURIComponent(target)).then(function(r){return r.json()})}
+var RELAY='https://r.jina.ai/';
+function jsonOf(r){if(!r.ok)throw new Error('код '+r.status);return r.text().then(function(t){
+  var i=t.indexOf('{');if(i<0)throw new Error('источник вернул не данные');
+  var d=JSON.parse(t.slice(i));if(d&&d.error)throw new Error(String(d.error.description||d.error));return d})}
+function prox(target){
+  return fetch(CFG.api+'?url='+encodeURIComponent(target)).then(jsonOf)
+    .catch(function(e){
+      return fetch(RELAY+target,{headers:{'X-Return-Format':'text'}}).then(jsonOf)
+        .catch(function(e2){throw new Error(e.message+' · через ретранслятор: '+e2.message)})})}
 function parseOcc(name){var m=name.match(/^TQQQ(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
 if(!m)return null;return{exp:Date.UTC(2000+ +m[1],+m[2]-1,+m[3])/1000,cp:m[4],strike:+m[5]/1000}}
 var RAW=null;

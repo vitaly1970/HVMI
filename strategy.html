@@ -140,7 +140,7 @@ footer .mark img{height:17px}
       <div><div class="lbl">Правило верхней стороны</div>
         <select id="cRule" style="width:100%"><option value="hedge">Хедж покупкой акций</option><option value="buyback">Откуп кола</option></select></div>
       <div><div class="lbl">Уровень откупа, % выше страйка</div><input id="cBB" type="number" step="0.5" style="width:100%"></div>
-      <div><div class="lbl">Адрес данных</div><input id="cApi" type="text" style="width:100%"></div>
+      <div><div class="lbl">Адрес прокси данных</div><input id="cApi" type="text" style="width:100%"></div>
       <div style="grid-column:1/-1"><div class="lbl">События, по строке: 26.08 Отчёт NVIDIA</div><textarea id="cEv" rows="3" style="width:100%;font-family:var(--sans);font-size:var(--fs-body);border:1px solid #ccc;padding:7px 10px"></textarea></div>
     </div>
     <button class="btn sm" id="bSave">Сохранить</button>
@@ -157,7 +157,7 @@ footer .mark img{height:17px}
   <details><summary>Связь с модулем barbell</summary><p>Сигнал выхода в SGOV главнее всех правил здесь. При недельном закрытии QQQ ниже 10% от максимума в тот же день выкупаются все колы и продаётся хедж. Пока хедж открыт, доля TQQQ выше плановой — это допустимо на срок до экспирации, не дольше.</p></details>
   <details><summary>События</summary><p>Новый кол не открывается, если внутри его срока заседание ФРС, публикация данных по инфляции или отчёт NVIDIA.</p></details>
   <details><summary>Учёт</summary><p>Каждый цикл фиксируется в журнале: дата, страйк, премия, был ли хедж, итог. Оценка стратегии возможна после пятнадцати циклов.</p></details>
-  <details><summary>Ограничения</summary><p>Уровень выхода из хеджа и правило одного повторного входа заданы по логике, а не по расчёту на исторических данных. Котировки приходят с задержкой около пятнадцати минут. Размер заявок в стакане источник не отдаёт — он смотрится в терминале при выставлении приказа.</p></details>
+  <details><summary>Ограничения</summary><p>Уровень выхода из хеджа и правило одного повторного входа заданы по логике, а не по расчёту на исторических данных. Котировки приходят с задержкой около пятнадцати минут. Размеры заявок приходят из цепочки CBOE и обновляются вместе с ней.</p></details>
 </section>
 
 <dialog id="dlg">
@@ -166,7 +166,7 @@ footer .mark img{height:17px}
     <div class="lbl">Срок</div>
     <div class="chips" id="exps"></div>
     <div class="lbl" id="strLbl">Страйк</div>
-    <table class="pick"><thead><tr><th>Страйк</th><th>Дельта</th><th>Покупка</th><th>Продажа</th><th>Середина</th><th>Спред</th><th>Объём</th><th>Интерес</th></tr></thead><tbody id="chain"></tbody></table>
+    <table class="pick"><thead><tr><th>Страйк</th><th>Дельта</th><th>Покупка</th><th>Продажа</th><th>Заявки</th><th>Середина</th><th>Спред</th><th>Объём</th><th>Интерес</th></tr></thead><tbody id="chain"></tbody></table>
     <p class="note" style="margin:6px 0 18px">Синим — рабочий диапазон дельты 0,17–0,20. Строки со спредом шире 30% или без сделок за день недоступны.</p>
     <div class="lbl">Контрактов</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
@@ -189,7 +189,7 @@ footer .mark img{height:17px}
 </footer>
 
 <script>
-var CFG={api:'/api/options',shares:0,rule:'hedge',bb:-1.2,ev:''};
+var CFG={api:'/api/proxy',shares:0,rule:'hedge',bb:-1.2,ev:''};
 var J=[],D=null,SEL={exp:null,strike:null},BASE=null;
 
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){}return null}
@@ -211,8 +211,35 @@ function spread(c){var m=mid(c);return m&&c.ask!=null&&c.bid!=null&&m>0?(c.ask-c
 function open_(){for(var i=J.length-1;i>=0;i--)if(J[i].st==='open')return J[i];return null}
 function evList(){return (CFG.ev||'').split('\n').map(function(s){return s.trim()}).filter(Boolean)}
 
-function api(date){var u=CFG.api+(date?(CFG.api.indexOf('?')<0?'?':'&')+'date='+date:'');
-return fetch(u).then(function(r){return r.json()})}
+var CBOE='https://cdn.cboe.com/api/global/delayed_quotes/options/TQQQ.json';
+var YQQQ='https://query2.finance.yahoo.com/v8/finance/chart/QQQ?range=1y&interval=1d';
+function prox(target){return fetch(CFG.api+'?url='+encodeURIComponent(target)).then(function(r){return r.json()})}
+function parseOcc(name){var m=name.match(/^TQQQ(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
+if(!m)return null;return{exp:Date.UTC(2000+ +m[1],+m[2]-1,+m[3])/1000,cp:m[4],strike:+m[5]/1000}}
+var RAW=null;
+function api(date){
+  var pQ=prox(YQQQ).catch(function(){return null});
+  var pC=(RAW&&Date.now()-RAW.ts<60e3)?Promise.resolve(RAW.d):prox(CBOE).then(function(d){RAW={d:d,ts:Date.now()};return d});
+  return Promise.all([pC,pQ]).then(function(a){
+    var d=a[0]&&a[0].data;if(!d||!d.options)throw new Error('цепочка CBOE пуста');
+    var byExp={},exps=[];
+    d.options.forEach(function(o){var p=parseOcc(o.option);if(!p||p.cp!=='C')return;
+      if(!byExp[p.exp]){byExp[p.exp]=[];exps.push(p.exp)}
+      byExp[p.exp].push({strike:p.strike,bid:o.bid,ask:o.ask,bidSize:o.bid_size||0,askSize:o.ask_size||0,
+        last:o.last_trade_price,volume:o.volume||0,oi:o.open_interest||0,iv:o.iv||null,delta:o.delta||null})});
+    exps=exps.filter(function(t){return t*1000>Date.now()});exps.sort(function(x,y){return x-y});
+    var sel=date&&byExp[date]?+date:exps[0];
+    byExp[sel].sort(function(x,y){return x.strike-y.strike});
+    var closes=[],stamps=[],ch=a[1]&&a[1].chart&&a[1].chart.result&&a[1].chart.result[0];
+    if(ch){stamps=ch.timestamp||[];closes=ch.indicators.quote[0].close||[]}
+    var lastW=null,ath=null,vals=closes.filter(function(v){return v!=null});
+    if(vals.length)ath=Math.max.apply(null,vals);
+    for(var i=stamps.length-1;i>=0;i--){var dd=new Date(stamps[i]*1000);
+      if(dd.getUTCDay()===5&&closes[i]!=null){lastW=closes[i];break}}
+    return{asOf:Date.now(),price:d.current_price,change:d.price_change,changePct:d.price_change_percent,
+      expirations:exps,selected:sel,calls:byExp[sel],qqq:{last:vals.length?vals[vals.length-1]:null,lastWeekly:lastW,ath:ath}}
+  })
+}
 
 function boot(){
   load();
@@ -316,7 +343,7 @@ function openDlg(){
     var b=document.createElement('button');b.className='chip';b.type='button';
     b.textContent=dshort(t)+' · '+tdays(t)+' дн.';
     b.onclick=function(){pickExp(t)};ex.appendChild(b)});
-  document.getElementById('chain').innerHTML='<tr><td colspan="8" class="note">Выберите срок.</td></tr>';
+  document.getElementById('chain').innerHTML='<tr><td colspan="9" class="note">Выберите срок.</td></tr>';
   document.getElementById('sum').innerHTML='';document.getElementById('evWarn').innerHTML='';
   document.getElementById('qtyNote').textContent=CFG.shares?('доступно '+Math.floor(CFG.shares/100)+' конт. · покрыто '+CFG.shares+' акциями'):'укажите число акций в настройках';
   document.getElementById('dlg').showModal()
@@ -326,22 +353,23 @@ function pickExp(t){
   SEL={exp:t,strike:null};
   var ch=document.getElementById('exps').children;
   BASE.expirations.slice(0,6).forEach(function(x,i){ch[i].className='chip'+(x===t?' on':'')});
-  document.getElementById('chain').innerHTML='<tr><td colspan="8" class="note">Загрузка цепочки.</td></tr>';
+  document.getElementById('chain').innerHTML='<tr><td colspan="9" class="note">Загрузка цепочки.</td></tr>';
   api(t).then(function(d){if(d.error)throw new Error(d.error);SEL.data=d;drawChain()})
-   .catch(function(e){document.getElementById('chain').innerHTML='<tr><td colspan="8" class="bad">Цепочка не получена. '+e.message+'</td></tr>'})
+   .catch(function(e){document.getElementById('chain').innerHTML='<tr><td colspan="9" class="bad">Цепочка не получена. '+e.message+'</td></tr>'})
 }
 
 function drawChain(){
   var d=SEL.data,S=d.price,T=tdays(SEL.exp)/252,h='';
   document.getElementById('strLbl').textContent='Страйк · TQQQ '+n2(S);
   d.calls.filter(function(c){return c.strike>S&&c.strike<S*1.35}).forEach(function(c){
-    var dl=delta(S,c.strike,T,c.iv),m=mid(c),sp=spread(c),
+    var dl=c.delta!=null?c.delta:delta(S,c.strike,T,c.iv),m=mid(c),sp=spread(c),
     dead=(sp==null||sp>30||!c.volume);
     h+='<tr class="'+(dead?'off':'')+(dl>=.17&&dl<=.20?' on':'')+'" data-k="'+c.strike+'">'+
-      '<td>'+n2(c.strike,0)+'</td><td>'+n2(dl)+'</td><td>'+n2(c.bid)+'</td><td>'+n2(c.ask)+'</td>'+
+      '<td>'+n2(c.strike,c.strike%1?1:0)+'</td><td>'+n2(dl)+'</td><td>'+n2(c.bid)+'</td><td>'+n2(c.ask)+'</td>'+
+      '<td>'+(c.bidSize||0)+'×'+(c.askSize||0)+'</td>'+
       '<td>'+n2(m,3)+'</td><td class="'+(sp==null?'':(sp>30?'bad':(sp<10?'ok':'')))+'">'+(sp==null?'—':Math.round(sp)+'%')+'</td>'+
       '<td>'+(c.volume||0)+'</td><td>'+(c.oi||0)+'</td></tr>'});
-  var tb=document.getElementById('chain');tb.innerHTML=h||'<tr><td colspan="8" class="note">Нет подходящих страйков.</td></tr>';
+  var tb=document.getElementById('chain');tb.innerHTML=h||'<tr><td colspan="9" class="note">Нет подходящих страйков.</td></tr>';
   Array.prototype.forEach.call(tb.rows,function(r){
     if(r.className.indexOf('off')>=0)return;
     r.onclick=function(){SEL.strike=parseFloat(r.dataset.k);

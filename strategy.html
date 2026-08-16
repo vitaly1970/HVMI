@@ -74,6 +74,10 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 .lbl{font-size:var(--fs-meta);color:var(--mut);margin-bottom:8px}
 input,select{font-family:var(--sans);font-size:var(--fs-body);border:1px solid #ccc;border-radius:0;padding:7px 10px;background:#fff;color:var(--ink)}
 .sum{background:var(--card);border-top:2px solid var(--blue);padding:14px;margin:16px 0}
+.rec{display:flex;align-items:center;justify-content:space-between;gap:12px;
+background:#E6F1FB;border-left:3px solid var(--blue);padding:10px 12px;margin-bottom:12px}
+.rec span{font-size:var(--fs-meta);color:#0C447C}
+.rec b{font-size:var(--fs-display);font-weight:var(--fw-mono-em);color:#0C447C;font-variant-numeric:tabular-nums}
 .acts{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
 details{border-top:1px solid var(--rule)}
 summary{cursor:pointer;padding:9px 0;font-size:var(--fs-body)}
@@ -140,6 +144,7 @@ footer .mark img{height:17px}
       <div><div class="lbl">Правило верхней стороны</div>
         <select id="cRule" style="width:100%"><option value="hedge">Хедж покупкой акций</option><option value="buyback">Откуп кола</option></select></div>
       <div><div class="lbl">Уровень откупа, % выше страйка</div><input id="cBB" type="number" step="0.5" style="width:100%"></div>
+      <div><div class="lbl">Порог дельты для включения хеджа</div><input id="cDH" type="number" step="0.05" min="0.05" max="0.95" style="width:100%"></div>
       <div><div class="lbl">Адрес прокси данных</div><input id="cApi" type="text" style="width:100%"></div>
       <div style="grid-column:1/-1"><div class="lbl">События, по строке: 26.08 Отчёт NVIDIA</div><textarea id="cEv" rows="3" style="width:100%;font-family:var(--sans);font-size:var(--fs-body);border:1px solid #ccc;padding:7px 10px"></textarea></div>
     </div>
@@ -151,7 +156,7 @@ footer .mark img{height:17px}
   <h2><i style="background:var(--yellow)"></i>Правила стратегии</h2><hr style="background:var(--yellow)">
   <details><summary>Вход</summary><p>Срок — ближайшая экспирация через 7–14 дней. Страйк — дельта от 0,17 до 0,20. Продажа только лимитным приказом по середине между покупкой и продажей, после сильного дня, а не после падения.</p></details>
   <details><summary>Ключевой уровень</summary><p>Точка безубытка равна страйку плюс премия. Ниже неё продажа кола выгоднее простого удержания акций. Выше неё весь дальнейший рост уходит покупателю кола.</p></details>
-  <details><summary>Правило верхней стороны</summary><p>Закрытие выше точки безубытка — продать часть QDTE и купить сто акций TQQQ на каждый проданный контракт. При исполнении отдать эту сотню по страйку и вернуть QDTE. Потеря на сотне равна премии, основная позиция не затронута.</p></details>
+  <details><summary>Правило верхней стороны</summary><p>Хедж включается, когда дельта проданного кола достигает порога (по умолчанию 0,60): продать часть QDTE и купить сто акций TQQQ на каждый проданный контракт. Дельта учитывает сразу и расстояние до страйка, и остаток времени, поэтому далеко от экспирации порог требует более сильного движения, а у самой экспирации срабатывает почти сразу за страйком. При исполнении отдать эту сотню по страйку и вернуть QDTE. Потеря на сотне равна премии, основная позиция не затронута.</p></details>
   <details><summary>Правило возврата</summary><p>Закрытие ниже страйка — продать купленную сотню. Цена ошибки примерно равна одной премии. Повторный вход в хедж в одном цикле разрешён один раз; после второго выноса кол выкупается и до экспирации новых продаж нет.</p></details>
   <details><summary>Перенос</summary><p>Перенос кола вверх и вперёд разрешён только с получением денег. Перенос с доплатой запрещён: выбор в этом случае — отдать бумаги или выкупить кол.</p></details>
   <details><summary>Связь с модулем barbell</summary><p>Сигнал выхода в SGOV главнее всех правил здесь. При недельном закрытии QQQ ниже 10% от максимума в тот же день выкупаются все колы и продаётся хедж. Пока хедж открыт, доля TQQQ выше плановой — это допустимо на срок до экспирации, не дольше.</p></details>
@@ -189,7 +194,7 @@ footer .mark img{height:17px}
 </footer>
 
 <script>
-var CFG={api:'/api/proxy',shares:0,rule:'hedge',bb:-1.2,ev:''};
+var CFG={api:'/api/proxy',shares:0,rule:'hedge',bb:-1.2,dh:0.60,ev:''};
 var J=[],D=null,SEL={exp:null,strike:null},BASE=null;
 
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){}return null}
@@ -293,10 +298,11 @@ function renderPos(){
     return
   }
 
-  var cc=posCall(p),m=cc?mid(cc):null,B=p.strike+p.prem,ex=p.strike*(1+CFG.bb/100);
+  var cc=posCall(p),m=cc?mid(cc):null,dl=cc&&cc.delta!=null?cc.delta:null,
+      B=p.strike+p.prem,ex=p.strike*(1+CFG.bb/100);
   var res=m!=null?(p.prem-m)*100*p.qty:null;
   document.getElementById('dte').textContent=tdays(p.exp);
-  document.getElementById('dteSub').textContent='торговых дней';
+  document.getElementById('dteSub').textContent='торговых дней · до '+dstr(p.exp);
   var pe=document.getElementById('pnl');
   pe.textContent=res==null?'—':money(res);pe.className=res>0?'ok':(res<0?'bad':'');
 
@@ -304,7 +310,9 @@ function renderPos(){
     row('Кол TQQQ '+n2(p.strike,0)+', экспирация '+dstr(p.exp), p.qty+' конт.')+
     row('Цена продажи', n2(p.prem))+
     row('Текущая цена кола', m==null?'—':n2(m,3))+
-    row('Точка безубытка — уровень хеджа', n2(B))+
+    row('Дельта кола сейчас', dl==null?'нет данных':n2(dl))+
+    row('Порог дельты для хеджа', n2(CFG.dh))+
+    row('Точка безубытка', n2(B))+
     row('Уровень выхода из хеджа', n2(ex))+
     row('Хедж', p.hedge?'открыт, '+p.qty*100+' акций':'не открыт')+
     '</tbody></table><div class="acts" style="margin-top:12px">'+
@@ -326,10 +334,12 @@ function renderPos(){
   var d2B=(B/D.price-1)*100;
   if(sgov){paint(st,dot,'var(--violet)','#5B3E9E');sT.textContent='Сигнал выхода в SGOV';sS.textContent='Выкупить колы и продать хедж сегодня, далее по модулю.'}
   else if(p.hedge&&D.price<p.strike){paint(st,dot,'var(--yellow)','#8A6200');sT.textContent='Выйти из хеджа';sS.textContent='Цена ниже страйка. Продать '+p.qty*100+' акций и вернуть QDTE.'}
-  else if(!p.hedge&&CFG.rule==='hedge'&&D.price>=B){paint(st,dot,'var(--blue)','#0C447C');sT.textContent='Включить хедж';sS.textContent='Цена выше точки безубытка. Продать часть QDTE и купить '+p.qty*100+' акций TQQQ.'}
+  else if(!p.hedge&&CFG.rule==='hedge'&&(dl!=null?dl>=CFG.dh:D.price>=B)){paint(st,dot,'var(--blue)','#0C447C');sT.textContent='Включить хедж';
+    sS.textContent=(dl!=null?'Дельта кола '+n2(dl)+' достигла порога '+n2(CFG.dh)+'. ':'Дельты нет, сработало запасное правило по цене. ')+'Продать часть QDTE и купить '+p.qty*100+' акций TQQQ.'}
   else if(!p.hedge&&CFG.rule==='buyback'&&D.price>=ex){paint(st,dot,'var(--red)','var(--red)');sT.textContent='Выкупить кол';sS.textContent='Цена достигла уровня откупа '+n2(ex)+'.'}
   else{paint(st,dot,'var(--green)','#5B8A00');sT.textContent='Держим позицию';
-    sS.textContent='До точки безубытка '+n2(B)+' осталось '+n2(d2B,1)+'%.'}
+    sS.textContent=(dl!=null?'Дельта кола '+n2(dl)+' при пороге хеджа '+n2(CFG.dh)+'. ':'')+
+      'До точки безубытка '+n2(B)+' осталось '+n2(d2B,1)+'%.'}
 }
 function paint(st,dot,c,t){st.style.borderLeftColor=c;dot.style.background=c;st.querySelector('b').style.color=t}
 function row(a,b){return '<tr class="k"><td>'+a+'</td><td>'+b+'</td></tr>'}
@@ -391,10 +401,13 @@ function drawSum(){
   if(!c)return;
   var m=mid(c),lim=Math.round(m*100)/100,q=Math.max(1,parseInt(document.getElementById('qty').value)||1),
   B=c.strike+lim,ex=c.strike*(1+CFG.bb/100);
-  document.getElementById('sum').innerHTML='<div class="sum"><div style="font-size:var(--fs-body);margin-bottom:10px">Кол TQQQ '+n2(c.strike,0)+', экспирация '+dstr(SEL.exp)+', '+q+' конт.</div><table><tbody>'+
-    row('Рекомендованная цена приказа', n2(lim)+' лимит')+
+  document.getElementById('sum').innerHTML='<div class="sum"><div style="font-size:var(--fs-body);margin-bottom:10px">Кол TQQQ '+n2(c.strike,c.strike%1?1:0)+', экспирация '+dstr(SEL.exp)+', '+q+' конт.</div>'+
+    '<div class="rec"><span>Рекомендованная цена продажи, лимитный приказ</span><b>'+n2(lim)+'</b></div>'+
+    '<table><tbody>'+
     row('Премия к получению', Math.round(lim*100*q))+
-    row('Точка безубытка — уровень хеджа', n2(B))+
+    row('Дельта выбранного страйка', c.delta!=null?n2(c.delta):'—')+
+    row('Порог дельты для хеджа', n2(CFG.dh))+
+    row('Точка безубытка', n2(B))+
     row('Уровень выхода из хеджа', n2(ex))+
     row('Запас до страйка', n2((c.strike/d.price-1)*100,1)+'%')+
     '</tbody></table></div>';
@@ -428,6 +441,8 @@ document.getElementById('bSave').onclick=function(){
   CFG.rule=document.getElementById('cRule').value;
   CFG.bb=parseFloat(document.getElementById('cBB').value);
   if(isNaN(CFG.bb))CFG.bb=-1.2;
+  CFG.dh=parseFloat(document.getElementById('cDH').value);
+  if(isNaN(CFG.dh)||CFG.dh<=0||CFG.dh>=1)CFG.dh=0.60;
   CFG.api=document.getElementById('cApi').value.trim()||'/api/options';
   CFG.ev=document.getElementById('cEv').value;
   save();renderPos();alert('Сохранено')};
@@ -436,6 +451,7 @@ load();
 document.getElementById('cShares').value=CFG.shares||'';
 document.getElementById('cRule').value=CFG.rule;
 document.getElementById('cBB').value=CFG.bb;
+document.getElementById('cDH').value=CFG.dh;
 document.getElementById('cApi').value=CFG.api;
 document.getElementById('cEv').value=CFG.ev;
 boot();

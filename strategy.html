@@ -426,10 +426,10 @@ function pickExp(t){
 }
 
 function drawChain(){
-  var d=SEL.data,S=d.price,T=tdays(SEL.exp)/252,h='';
+  var d=SEL.data,S=d.price,tt=tdays(SEL.exp)/252,h='';
   document.getElementById('strLbl').textContent='Страйк · TQQQ '+n2(S);
   d.calls.filter(function(c){return c.strike>S&&c.strike<S*T().span}).forEach(function(c){
-    var dl=c.delta!=null?c.delta:delta(S,c.strike,T,c.iv),m=mid(c),sp=spread(c),
+    var dl=c.delta!=null?c.delta:delta(S,c.strike,tt,c.iv),m=mid(c),sp=spread(c),
     dead=(sp==null||sp>30||!c.volume);
     h+='<tr class="'+(dead?'off':'')+(dl>=.17&&dl<=.20?' on':'')+'" data-k="'+c.strike+'">'+
       '<td>'+n2(c.strike,c.strike%1?1:0)+'</td><td>'+n2(dl)+'</td><td>'+n2(c.bid)+'</td><td>'+n2(c.ask)+'</td>'+

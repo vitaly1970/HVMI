@@ -97,7 +97,14 @@ footer{margin-top:36px;padding-top:0}
 .fname{font-size:var(--fs-meta);font-weight:var(--fw-bold);color:var(--ink)}
 .fyear{font-size:var(--fs-micro);color:#B4B4B4}
 .hide{display:none}
-@media (max-width:760px){nav{gap:12px}}
+.tabs{display:flex;gap:2px;margin:0;padding:0;list-style:none}
+.tab{border:1px solid var(--rule);border-bottom:0;border-top:2px solid var(--rule);background:var(--card);
+color:var(--mut);padding:9px 18px;font-family:var(--sans);font-size:var(--fs-body);cursor:pointer;border-radius:0}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{background:#fff;color:var(--ink);border-top-color:var(--violet)}
+.panel{border:1px solid var(--rule);padding:18px;margin-bottom:26px}
+.tabs+.panel{margin-top:-1px}
+@media (max-width:760px){nav{gap:12px}.tab{padding:9px 12px}}
 </style>
 </head>
 <body>
@@ -117,36 +124,59 @@ footer{margin-top:36px;padding-top:0}
 
 <div class="tiles">
   <div class="tile"><span>TQQQ</span><b id="px">—</b><span id="pxch">—</span></div>
-  <div class="tile"><span>До экспирации</span><b id="dte">—</b><span id="dteSub">нет позиции</span></div>
-  <div class="tile"><span>Итог позиции</span><b id="pnl">—</b><span>на всю позицию</span></div>
 </div>
 
-<div class="state" id="state">
-  <i></i><div><b id="stateT">Нет открытой позиции</b><span id="stateS">Откройте позицию кнопкой ниже.</span></div>
+<div class="tabs" role="tablist" aria-label="Срок экспирации">
+  <button class="tab" role="tab" id="tabW" aria-controls="panel" aria-selected="true">Недельные</button>
+  <button class="tab" role="tab" id="tabB" aria-controls="panel" aria-selected="false">Двухнедельные</button>
 </div>
 
-<section class="sec">
-  <div class="sec-head">
-    <div><h2><i></i>Открытая позиция</h2><hr></div>
-    <button class="btn" id="bNew">Новая позиция</button>
+<div class="panel" id="panel" role="tabpanel" aria-labelledby="tabW">
+
+  <div class="tiles">
+    <div class="tile"><span>До экспирации</span><b id="dte">—</b><span id="dteSub">нет позиции</span></div>
+    <div class="tile"><span>Итог позиции</span><b id="pnl">—</b><span>на всю позицию</span></div>
   </div>
-  <div id="pos"><p class="note">Позиции нет. Кнопка «Новая позиция» откроет цепочку и посчитает уровни.</p></div>
-</section>
 
-<section class="sec">
-  <h2><i style="background:var(--green)"></i>Журнал циклов</h2><hr style="background:var(--green)">
-  <div id="log"><p class="note">Записей нет.</p></div>
-</section>
+  <div class="state" id="state">
+    <i></i><div><b id="stateT">Нет открытой позиции</b><span id="stateS">Откройте позицию кнопкой ниже.</span></div>
+  </div>
 
-<section class="sec">
-  <h2><i style="background:var(--blue)"></i>Настройки</h2><hr style="background:var(--blue)">
-  <details><summary>Параметры расчёта</summary>
+  <section class="sec">
+    <div class="sec-head">
+      <div><h2><i></i>Открытая позиция</h2><hr></div>
+      <button class="btn" id="bNew">Новая позиция</button>
+    </div>
+    <div id="pos"><p class="note">Позиции нет. Кнопка «Новая позиция» откроет цепочку и посчитает уровни.</p></div>
+  </section>
+
+  <section class="sec">
+    <h2><i style="background:var(--green)"></i>Журнал циклов</h2><hr style="background:var(--green)">
+    <div id="log"><p class="note">Записей нет.</p></div>
+  </section>
+
+  <section class="sec" style="margin-bottom:0">
+    <h2><i style="background:var(--blue)"></i>Настройки срока</h2><hr style="background:var(--blue)">
     <div class="grid2" style="margin:12px 0">
-      <div><div class="lbl">Акций TQQQ, остающихся в позиции</div><input id="cShares" type="number" min="0" step="100" style="width:100%"></div>
       <div><div class="lbl">Правило верхней стороны</div>
         <select id="cRule" style="width:100%"><option value="hedge">Хедж покупкой акций</option><option value="buyback">Откуп кола</option></select></div>
-      <div><div class="lbl">Уровень откупа, % выше страйка</div><input id="cBB" type="number" step="0.5" style="width:100%"></div>
       <div><div class="lbl">Порог дельты для включения хеджа</div><input id="cDH" type="number" step="0.05" min="0.05" max="0.95" style="width:100%"></div>
+      <div><div class="lbl">Уровень откупа, % выше страйка</div><input id="cBB" type="number" step="0.5" style="width:100%"></div>
+      <div><div class="lbl">Окно срока, календарных дней</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="cLo" type="number" min="1" step="1" style="width:100%"><span class="note">—</span><input id="cHi" type="number" min="1" step="1" style="width:100%">
+        </div></div>
+    </div>
+    <button class="btn sm" id="bSaveTab">Сохранить</button>
+  </section>
+
+</div>
+
+<section class="sec">
+  <h2><i style="background:var(--yellow)"></i>Общие настройки</h2><hr style="background:var(--yellow)">
+  <details><summary>Параметры, общие для обоих сроков</summary>
+    <div class="grid2" style="margin:12px 0">
+      <div><div class="lbl">Акций TQQQ, остающихся в позиции</div><input id="cShares" type="number" min="0" step="100" style="width:100%"></div>
       <div><div class="lbl">Адрес прокси данных</div><input id="cApi" type="text" style="width:100%"></div>
       <div style="grid-column:1/-1"><div class="lbl">События, по строке: 26.08 Отчёт NVIDIA</div><textarea id="cEv" rows="3" style="width:100%;font-family:var(--sans);font-size:var(--fs-body);border:1px solid #ccc;padding:7px 10px"></textarea></div>
     </div>
@@ -160,6 +190,7 @@ footer{margin-top:36px;padding-top:0}
   <div class="dlg-body">
     <div class="lbl">Срок</div>
     <div class="chips" id="exps"></div>
+    <p class="note" id="expNote" style="margin:-10px 0 18px"></p>
     <div class="lbl" id="strLbl">Страйк</div>
     <table class="pick"><thead><tr><th>Страйк</th><th>Дельта</th><th>Покупка</th><th>Продажа</th><th>Заявки</th><th>Середина</th><th>Спред</th><th>Объём</th><th>Интерес</th></tr></thead><tbody id="chain"></tbody></table>
     <p class="note" style="margin:6px 0 18px">Синим — рабочий диапазон дельты 0,17–0,20. Строки со спредом шире 30% или без сделок за день недоступны.</p>
@@ -186,13 +217,26 @@ footer{margin-top:36px;padding-top:0}
 </footer>
 
 <script>
-var CFG={api:'/api/proxy',shares:0,rule:'hedge',bb:-1.2,dh:0.60,ev:''};
+var DEF={w:{rule:'buyback',bb:-1.2,dh:0.45,lo:3,hi:10,span:1.20},
+         b:{rule:'hedge',   bb:-1.2,dh:0.60,lo:11,hi:20,span:1.35}};
+var CFG={api:'/api/proxy',shares:0,ev:'',tabs:{w:Object.assign({},DEF.w),b:Object.assign({},DEF.b)}};
+var TAB='w';
 var J=[],D=null,SEL={exp:null,strike:null},BASE=null;
+function T(){return CFG.tabs[TAB]}
 
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){}return null}
-function load(){var c=ls('cc_cfg');if(c){try{Object.assign(CFG,JSON.parse(c))}catch(e){}}
-var j=ls('cc_log');if(j){try{J=JSON.parse(j)}catch(e){}}}
-function save(){ls('cc_cfg',JSON.stringify(CFG));ls('cc_log',JSON.stringify(J))}
+function load(){var c=ls('cc_cfg');
+if(c){try{var o=JSON.parse(c);
+  if(!o.tabs){o.tabs={w:Object.assign({},DEF.w),b:Object.assign({},DEF.b)};
+    if(o.rule)o.tabs.b.rule=o.rule;
+    if(o.bb!=null&&!isNaN(o.bb))o.tabs.b.bb=o.bb;
+    if(o.dh!=null&&!isNaN(o.dh))o.tabs.b.dh=o.dh;
+    delete o.rule;delete o.bb;delete o.dh}
+  else{['w','b'].forEach(function(k){o.tabs[k]=Object.assign({},DEF[k],o.tabs[k]||{})})}
+  Object.assign(CFG,o)}catch(e){}}
+var j=ls('cc_log');if(j){try{J=JSON.parse(j);J.forEach(function(p){if(!p.tab)p.tab='b'})}catch(e){}}
+var t=ls('cc_tab');if(t==='w'||t==='b')TAB=t}
+function save(){ls('cc_cfg',JSON.stringify(CFG));ls('cc_log',JSON.stringify(J));ls('cc_tab',TAB)}
 function n2(x,d){return x==null||isNaN(x)?'—':Number(x).toFixed(d===undefined?2:d)}
 function money(x){return (x>0?'+':'')+Math.round(x)}
 function dstr(t){var d=new Date(t*1000);return ('0'+d.getUTCDate()).slice(-2)+'.'+('0'+(d.getUTCMonth()+1)).slice(-2)+'.'+d.getUTCFullYear()}
@@ -205,7 +249,8 @@ function delta(S,K,T,v){if(!S||!K||!T||!v)return null;var r=.04;
 return cnd((Math.log(S/K)+(r+v*v/2)*T)/(v*Math.sqrt(T)))}
 function mid(c){return c.bid!=null&&c.ask!=null&&c.ask>0?(c.bid+c.ask)/2:(c.last||null)}
 function spread(c){var m=mid(c);return m&&c.ask!=null&&c.bid!=null&&m>0?(c.ask-c.bid)/m*100:null}
-function open_(){for(var i=J.length-1;i>=0;i--)if(J[i].st==='open')return J[i];return null}
+function open_(){for(var i=J.length-1;i>=0;i--)if(J[i].st==='open'&&J[i].tab===TAB)return J[i];return null}
+function cdays(t){return Math.max(0,Math.round((t*1000-Date.now())/86400000))}
 function evList(){return (CFG.ev||'').split('\n').map(function(s){return s.trim()}).filter(Boolean)}
 
 var CBOE='https://cdn.cboe.com/api/global/delayed_quotes/options/TQQQ.json';
@@ -291,7 +336,7 @@ function renderPos(){
   }
 
   var cc=posCall(p),m=cc?mid(cc):null,dl=cc&&cc.delta!=null?cc.delta:null,
-      B=p.strike+p.prem,ex=p.strike*(1+CFG.bb/100);
+      B=p.strike+p.prem,ex=p.strike*(1+T().bb/100);
   var res=m!=null?(p.prem-m)*100*p.qty:null;
   document.getElementById('dte').textContent=tdays(p.exp);
   document.getElementById('dteSub').textContent='торговых дней · до '+dstr(p.exp);
@@ -303,7 +348,7 @@ function renderPos(){
     row('Цена продажи', n2(p.prem))+
     row('Текущая цена кола', m==null?'—':n2(m,3))+
     row('Дельта кола сейчас', dl==null?'нет данных':n2(dl))+
-    row('Порог дельты для хеджа', n2(CFG.dh))+
+    row('Порог дельты для хеджа', n2(T().dh))+
     row('Точка безубытка', n2(B))+
     row('Уровень выхода из хеджа', n2(ex))+
     row('Хедж', p.hedge?'открыт, '+p.qty*100+' акций':'не открыт')+
@@ -326,11 +371,11 @@ function renderPos(){
   var d2B=(B/D.price-1)*100;
   if(sgov){paint(st,dot,'var(--violet)','#5B3E9E');sT.textContent='Сигнал выхода в SGOV';sS.textContent='Выкупить колы и продать хедж сегодня, далее по модулю.'}
   else if(p.hedge&&D.price<p.strike){paint(st,dot,'var(--yellow)','#8A6200');sT.textContent='Выйти из хеджа';sS.textContent='Цена ниже страйка. Продать '+p.qty*100+' акций и вернуть QDTE.'}
-  else if(!p.hedge&&CFG.rule==='hedge'&&(dl!=null?dl>=CFG.dh:D.price>=B)){paint(st,dot,'var(--blue)','#0C447C');sT.textContent='Включить хедж';
-    sS.textContent=(dl!=null?'Дельта кола '+n2(dl)+' достигла порога '+n2(CFG.dh)+'. ':'Дельты нет, сработало запасное правило по цене. ')+'Продать часть QDTE и купить '+p.qty*100+' акций TQQQ.'}
-  else if(!p.hedge&&CFG.rule==='buyback'&&D.price>=ex){paint(st,dot,'var(--red)','var(--red)');sT.textContent='Выкупить кол';sS.textContent='Цена достигла уровня откупа '+n2(ex)+'.'}
+  else if(!p.hedge&&T().rule==='hedge'&&(dl!=null?dl>=T().dh:D.price>=B)){paint(st,dot,'var(--blue)','#0C447C');sT.textContent='Включить хедж';
+    sS.textContent=(dl!=null?'Дельта кола '+n2(dl)+' достигла порога '+n2(T().dh)+'. ':'Дельты нет, сработало запасное правило по цене. ')+'Продать часть QDTE и купить '+p.qty*100+' акций TQQQ.'}
+  else if(!p.hedge&&T().rule==='buyback'&&D.price>=ex){paint(st,dot,'var(--red)','var(--red)');sT.textContent='Выкупить кол';sS.textContent='Цена достигла уровня откупа '+n2(ex)+'.'}
   else{paint(st,dot,'var(--green)','#5B8A00');sT.textContent='Держим позицию';
-    sS.textContent=(dl!=null?'Дельта кола '+n2(dl)+' при пороге хеджа '+n2(CFG.dh)+'. ':'')+
+    sS.textContent=(dl!=null?'Дельта кола '+n2(dl)+' при пороге хеджа '+n2(T().dh)+'. ':'')+
       'До точки безубытка '+n2(B)+' осталось '+n2(d2B,1)+'%.'}
 }
 function paint(st,dot,c,t){st.style.borderLeftColor=c;dot.style.background=c;st.querySelector('b').style.color=t}
@@ -339,8 +384,10 @@ function row(a,b){return '<tr class="k"><td>'+a+'</td><td>'+b+'</td></tr>'}
 function renderLog(){
   var box=document.getElementById('log');
   if(!J.length){box.innerHTML='<p class="note">Записей нет.</p>';return}
+  var L=J.filter(function(x){return x.tab===TAB});
+  if(!L.length){box.innerHTML='<p class="note">Записей нет.</p>';return}
   var h='<table><thead><tr><th>Открыт</th><th>Страйк</th><th>Срок</th><th>Конт.</th><th>Премия</th><th>Хедж</th><th>Итог</th></tr></thead><tbody>';
-  for(var i=J.length-1;i>=0;i--){var p=J[i];
+  for(var i=L.length-1;i>=0;i--){var p=L[i];
     h+='<tr><td>'+new Date(p.opened).toLocaleDateString('ru-RU')+'</td><td>'+n2(p.strike,0)+'</td><td>'+dshort(p.exp)+'</td><td>'+p.qty+'</td><td>'+n2(p.prem)+'</td><td>'+(p.hedge?'да':'нет')+'</td><td class="'+(p.st==='open'?'':(p.res>0?'ok':'bad'))+'">'+(p.st==='open'?'открыт':money(p.res))+'</td></tr>'}
   box.innerHTML=h+'</tbody></table>'
 }
@@ -349,20 +396,30 @@ function openDlg(){
   if(!BASE){alert('Данные не загружены.');return}
   SEL={exp:null,strike:null};
   var ex=document.getElementById('exps');ex.innerHTML='';
-  BASE.expirations.slice(0,6).forEach(function(t){
+  SEL.list=expList();
+  SEL.list.forEach(function(t){
     var b=document.createElement('button');b.className='chip';b.type='button';
-    b.textContent=dshort(t)+' · '+tdays(t)+' дн.';
+    b.textContent=dshort(t)+' · '+cdays(t)+' дн.';
     b.onclick=function(){pickExp(t)};ex.appendChild(b)});
+  document.getElementById('expNote').textContent=SEL.fit
+    ?('окно срока '+T().lo+'—'+T().hi+' дней')
+    :('в окне '+T().lo+'—'+T().hi+' дней экспираций нет, показаны ближайшие');
   document.getElementById('chain').innerHTML='<tr><td colspan="9" class="note">Выберите срок.</td></tr>';
   document.getElementById('sum').innerHTML='';document.getElementById('evWarn').innerHTML='';
   document.getElementById('qtyNote').textContent=CFG.shares?('доступно '+Math.floor(CFG.shares/100)+' конт. · покрыто '+CFG.shares+' акциями'):'укажите число акций в настройках';
   document.getElementById('dlg').showModal()
 }
 
+function expList(){
+  var f=BASE.expirations.filter(function(t){var d=cdays(t);return d>=T().lo&&d<=T().hi});
+  SEL.fit=f.length>0;
+  return f.length?f.slice(0,4):BASE.expirations.slice(0,3)}
+
 function pickExp(t){
-  SEL={exp:t,strike:null};
+  var list=SEL.list||[];
+  SEL={exp:t,strike:null,list:list,fit:SEL.fit};
   var ch=document.getElementById('exps').children;
-  BASE.expirations.slice(0,6).forEach(function(x,i){ch[i].className='chip'+(x===t?' on':'')});
+  list.forEach(function(x,i){ch[i].className='chip'+(x===t?' on':'')});
   document.getElementById('chain').innerHTML='<tr><td colspan="9" class="note">Загрузка цепочки.</td></tr>';
   api(t).then(function(d){if(d.error)throw new Error(d.error);SEL.data=d;drawChain()})
    .catch(function(e){document.getElementById('chain').innerHTML='<tr><td colspan="9" class="bad">Цепочка не получена. '+e.message+'</td></tr>'})
@@ -371,7 +428,7 @@ function pickExp(t){
 function drawChain(){
   var d=SEL.data,S=d.price,T=tdays(SEL.exp)/252,h='';
   document.getElementById('strLbl').textContent='Страйк · TQQQ '+n2(S);
-  d.calls.filter(function(c){return c.strike>S&&c.strike<S*1.35}).forEach(function(c){
+  d.calls.filter(function(c){return c.strike>S&&c.strike<S*T().span}).forEach(function(c){
     var dl=c.delta!=null?c.delta:delta(S,c.strike,T,c.iv),m=mid(c),sp=spread(c),
     dead=(sp==null||sp>30||!c.volume);
     h+='<tr class="'+(dead?'off':'')+(dl>=.17&&dl<=.20?' on':'')+'" data-k="'+c.strike+'">'+
@@ -392,13 +449,13 @@ function drawSum(){
   d.calls.forEach(function(x){if(x.strike===SEL.strike)c=x});
   if(!c)return;
   var m=mid(c),lim=Math.round(m*100)/100,q=Math.max(1,parseInt(document.getElementById('qty').value)||1),
-  B=c.strike+lim,ex=c.strike*(1+CFG.bb/100);
+  B=c.strike+lim,ex=c.strike*(1+T().bb/100);
   document.getElementById('sum').innerHTML='<div class="sum"><div style="font-size:var(--fs-body);margin-bottom:10px">Кол TQQQ '+n2(c.strike,c.strike%1?1:0)+', экспирация '+dstr(SEL.exp)+', '+q+' конт.</div>'+
     '<div class="rec"><span>Рекомендованная цена продажи, лимитный приказ</span><b>'+n2(lim)+'</b></div>'+
     '<table><tbody>'+
     row('Премия к получению', Math.round(lim*100*q))+
     row('Дельта выбранного страйка', c.delta!=null?n2(c.delta):'—')+
-    row('Порог дельты для хеджа', n2(CFG.dh))+
+    row('Порог дельты для хеджа', n2(T().dh))+
     row('Точка безубытка', n2(B))+
     row('Уровень выхода из хеджа', n2(ex))+
     row('Запас до страйка', n2((c.strike/d.price-1)*100,1)+'%')+
@@ -418,7 +475,7 @@ function openPos(){
   if(q<1){alert('Число контрактов — не меньше одного.');return}
   if(max!==null&&q>max){alert('Контрактов больше, чем покрыто акциями. Доступно '+max+'.');return}
   var c=null;SEL.data.calls.forEach(function(x){if(x.strike===SEL.strike)c=x});
-  J.push({opened:Date.now(),exp:SEL.exp,strike:c.strike,qty:q,prem:Math.round(mid(c)*100)/100,hedge:false,st:'open'});
+  J.push({opened:Date.now(),tab:TAB,exp:SEL.exp,strike:c.strike,qty:q,prem:Math.round(mid(c)*100)/100,hedge:false,st:'open'});
   save();document.getElementById('dlg').close();
   api(SEL.exp).then(function(d){D=d;render()})
 }
@@ -428,24 +485,54 @@ document.getElementById('bX').onclick=function(){document.getElementById('dlg').
 document.getElementById('bCancel').onclick=function(){document.getElementById('dlg').close()};
 document.getElementById('bOpen').onclick=openPos;
 document.getElementById('qty').oninput=function(){if(SEL.strike)drawSum()};
+document.getElementById('bSaveTab').onclick=function(){
+  var t=T();
+  t.rule=document.getElementById('cRule').value;
+  t.bb=parseFloat(document.getElementById('cBB').value);
+  if(isNaN(t.bb))t.bb=DEF[TAB].bb;
+  t.dh=parseFloat(document.getElementById('cDH').value);
+  if(isNaN(t.dh)||t.dh<=0||t.dh>=1)t.dh=DEF[TAB].dh;
+  t.lo=parseInt(document.getElementById('cLo').value);
+  t.hi=parseInt(document.getElementById('cHi').value);
+  if(isNaN(t.lo)||t.lo<1)t.lo=DEF[TAB].lo;
+  if(isNaN(t.hi)||t.hi<t.lo)t.hi=Math.max(t.lo,DEF[TAB].hi);
+  save();fillTab();renderPos();alert('Сохранено')};
+
 document.getElementById('bSave').onclick=function(){
   CFG.shares=parseInt(document.getElementById('cShares').value)||0;
-  CFG.rule=document.getElementById('cRule').value;
-  CFG.bb=parseFloat(document.getElementById('cBB').value);
-  if(isNaN(CFG.bb))CFG.bb=-1.2;
-  CFG.dh=parseFloat(document.getElementById('cDH').value);
-  if(isNaN(CFG.dh)||CFG.dh<=0||CFG.dh>=1)CFG.dh=0.60;
   CFG.api=document.getElementById('cApi').value.trim()||'/api/options';
   CFG.ev=document.getElementById('cEv').value;
   save();renderPos();alert('Сохранено')};
 
+function fillTab(){
+  var t=T(),buy=t.rule==='buyback';
+  document.getElementById('cRule').value=t.rule;
+  document.getElementById('cBB').value=t.bb;
+  document.getElementById('cDH').value=t.dh;
+  document.getElementById('cLo').value=t.lo;
+  document.getElementById('cHi').value=t.hi;
+  var dh=document.getElementById('cDH');
+  dh.disabled=buy;dh.style.color=buy?'#aaa':'';
+  dh.title=buy?'Действует только при правиле «Хедж покупкой акций»':'';
+  document.getElementById('tabW').setAttribute('aria-selected',TAB==='w');
+  document.getElementById('tabB').setAttribute('aria-selected',TAB==='b');
+  document.getElementById('panel').setAttribute('aria-labelledby',TAB==='w'?'tabW':'tabB')}
+
+function pickTab(k){if(k===TAB)return;TAB=k;save();fillTab();
+  var p=open_();
+  api(p?p.exp:null).then(function(d){D=d;BASE=BASE||d;render()}).catch(function(){renderPos();renderLog()})}
+
+document.getElementById('cRule').onchange=function(){
+  var buy=this.value==='buyback',dh=document.getElementById('cDH');
+  dh.disabled=buy;dh.style.color=buy?'#aaa':''};
+document.getElementById('tabW').onclick=function(){pickTab('w')};
+document.getElementById('tabB').onclick=function(){pickTab('b')};
+
 load();
 document.getElementById('cShares').value=CFG.shares||'';
-document.getElementById('cRule').value=CFG.rule;
-document.getElementById('cBB').value=CFG.bb;
-document.getElementById('cDH').value=CFG.dh;
 document.getElementById('cApi').value=CFG.api;
 document.getElementById('cEv').value=CFG.ev;
+fillTab();
 boot();
 </script>
 </body>

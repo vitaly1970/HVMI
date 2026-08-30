@@ -483,6 +483,7 @@ function runCoreTQQQ(rows,weekEnd){
   let fired=[false,false,false];
   let ref=null;                // референс возврата (фикс. цена)
   let ath=-Infinity;
+  let armed=true;              // цикл заряжен; разряжается выходом, взводится только новым ATH
   let falseRow=0, flagI8=false;
   let justExited=false;
   const ev=[];                 // переходы: {t,i,...} — i — индекс бара события
@@ -500,15 +501,17 @@ function runCoreTQQQ(rows,weekEnd){
           ev.push({t:'rung',i,j,px:rungPx[j],inPos:[10,35,100][j]}); }
       }
     }else if(ath>prevAth && prevAth>-Infinity){
-      // новый ATH вне кризиса — цикл лестницы закрыт, флаги сброшены (I-6)
-      fired=[false,false,false]; falseRow=0;
+      // новый ATH вне кризиса — цикл лестницы закрыт, флаги сброшены (I-6),
+      // цикл снова заряжен: до этого момента повторный выход невозможен
+      fired=[false,false,false]; falseRow=0; armed=true;
     }
 
     if(weekEnd[i]){                       // ТОЛЬКО закрытие недели (I-4)
       const dd=r.c/ath-1;
       if(!out){
-        if(dd<=CORE.EXIT){
+        if(dd<=CORE.EXIT && armed){
           out=true;
+          armed=false;                    // цикл разряжен до нового ATH
           exitPx=ath*(1+CORE.EXIT);
           rungPx=RUNG.map(([,th])=>ath*(1+th));
           fired=[false,false,false];
@@ -528,7 +531,7 @@ function runCoreTQQQ(rows,weekEnd){
   }
   let depth='EXIT';
   for(let j=0;j<3;j++) if(fired[j]) depth=RUNG[j][0];
-  return{out,depth,fired,ref,exitPx,rungPx,flagI8,falseRow,justExited,ath,ev,
+  return{out,depth,fired,ref,exitPx,rungPx,flagI8,falseRow,justExited,ath,armed,ev,
          phase: out?depth:null};
 }
 

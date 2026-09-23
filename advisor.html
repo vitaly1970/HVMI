@@ -228,9 +228,9 @@ const DD={yellow:-5,exit:-10,t1:-20.6,t2:-29.5,t3:-41.5};
 
 /* параметры модуля аллокации (порт из бэктеста v2.2) */
 const MOD={ENTER:0.009,EXIT:0.004,CIN:5,COUT:3,SCON:2.5,SCOFF:2.0,YEL:-0.05,RED:-0.10,SW:10};
-const W20='TQQQ 20% / QDTE 80%';      // сниженная доля (перегрев)
-const W40='TQQQ 40% / QDTE 60%';      // база
-const W60='TQQQ 60% / QDTE 40%';      // разгон
+const W0='TQQQ 0% / QDTE 100%';      // перегрев: TQQQ выведен
+const W20='TQQQ 20% / QDTE 80%';     // база
+const W100='TQQQ 100% / QDTE 0%';    // тренд
 
 function log(s){ if(window.console) console.log(s); }
 
@@ -342,17 +342,18 @@ function scoreArr(closes,sma200,rows){
 
 /* ---- МАШИНА СОСТОЯНИЙ МОДУЛЯ (порт run_module из бэктеста + блок перегрева по баллу) ----
    Прогон по дневным закрытиям QQQ. Три аллокационных состояния:
-     RISKOFF = 20/80 (перегрев), BASE = 40/60 (по умолчанию), RISKON = 60/40 (тренд).
+     RISKOFF = 0/100 (перегрев), BASE = 20/80 (по умолчанию), RISKON = 100/0 (тренд).
    Переходы: сводный показатель ≥ 2,5σ → латч перегрева и RISKOFF немедленно
    (из любого состояния); латч снимается при < 2,0σ — RISKOFF возвращается в BASE;
-   пока латч горит, вход в повышенную долю заблокирован; наклон EMA20
-   двигает BASE↔RISKON (подтверждения 5/3). Красный/жёлтый в приоритете.
-   Вес — чистая функция state: RISKOFF 20, BASE 40, RISKON 60. */
+   пока латч горит, вход в повышенную долю заблокирован; после снятия латча
+   возврат к базовой доле только при наклоне EMA20 выше ENTER, иначе RISKOFF держится;
+   наклон EMA20 двигает BASE↔RISKON (подтверждения 5/3). Красный/жёлтый в приоритете.
+   Вес — чистая функция state: RISKOFF 0, BASE 20, RISKON 100. */
 function runModule(closes,ema20,score){
   const N=closes.length,{ENTER,EXIT,CIN,COUT,SCON,SCOFF,YEL,RED,SW}=MOD;
   let state='BASE',ci=0,co=0,pending=null,overext=false,ath=-Infinity,prev='BASE';
   let out=null;
-  const ev=[],wOf=x=>({RISKOFF:20,BASE:40,RISKON:60,CORE_OFF:40})[x]||40;
+  const ev=[],wOf=x=>({RISKOFF:0,BASE:20,RISKON:100,CORE_OFF:20})[x]||20;
   for(let i=0;i<N;i++){
     ath=Math.max(ath,closes[i]);
     const dd=closes[i]/ath-1;
@@ -364,8 +365,9 @@ function runModule(closes,ema20,score){
     if(dd<=RED){ns='CORE_OFF';ci=co=0;pending=null;}
     else if(dd<=YEL){ns='BASE';ci=co=0;pending=null;}                 // жёлтый → база
     else if(overext){ns='RISKOFF';ci=co=0;pending=null;}              // перегрев по баллу → сниженная доля
+    else if(state==='RISKOFF'&&!(!isNaN(slope)&&slope>ENTER)){ns='RISKOFF';ci=co=0;pending=null;} // латч снят, но наклон ниже порога → TQQQ не возвращаем
     else{
-      ns=(state==='CORE_OFF'||state==='RISKOFF')?'BASE':state;        // латч снят → базовая доля немедленно
+      ns=(state==='CORE_OFF'||state==='RISKOFF')?'BASE':state;        // латч снят и наклон выше порога → базовая доля
       if(ns==='BASE'){
         const want=(!isNaN(slope)&&slope>ENTER&&!overext)?'RISKON':null;
         if(want&&want===pending)ci++;
@@ -393,7 +395,7 @@ function moduleView(m,ddFrac){
   const sl=m.slope*100;
   const DOT={acc:'var(--acc)',base:'var(--sec)',warn:'var(--warn-dot)',ok:'var(--ok-dot)'};
   const COL={acc:'var(--acc)',base:'var(--sec)',warn:'var(--warn)',ok:'var(--ok)'};
-  const wOf=s=>({RISKOFF:20,BASE:40,RISKON:60,CORE_OFF:40})[s]||40;
+  const wOf=s=>({RISKOFF:0,BASE:20,RISKON:100,CORE_OFF:20})[s]||20;
   const wN=wOf(m.state), wP=wOf(m.prev);
   const rebal=wN!==wP;                                  // доля изменилась на этом баре → прямое указание
   const sg=x=>(x>=0?'+':'−')+Math.abs(x).toFixed(2);
@@ -401,47 +403,48 @@ function moduleView(m,ddFrac){
                           :`сводный показатель перегрева <b>${sg(m.sc)} σ</b>`;
   let label,dot,col,dist,ind,act;
 
-  if(ddFrac<=MOD.YEL){                                   // жёлтая зона → базовая доля 40/60
-    label='Жёлтая зона: просадка глубже −5%';dot=DOT.warn;col=COL.warn;dist=W40;
+  if(ddFrac<=MOD.YEL){                                   // жёлтая зона → базовая доля 20/80
+    label='Жёлтая зона: просадка глубже −5%';dot=DOT.warn;col=COL.warn;dist=W20;
     ind=[`просадка QQQ <b>${pc1(ddFrac*100)}</b>`,
          `пока просадка глубже −5%, доли не меняются по тренду — даже если наклон EMA20 говорит об обратном`];
-    act='держать '+W40;
-  }else if(m.state==='RISKOFF'){                         // сниженная доля 20/80
-    dist=W20;dot=DOT.warn;col=COL.warn;
-    label='Рынок перегрет по сводному показателю — доля снижена';
-    ind=[`${scLine} — блок включён на пороге 2,5σ`,
-         `возврат к базовой доле при значении ниже 2,0σ`];
     act='держать '+W20;
+  }else if(m.state==='RISKOFF'){                         // перегрев → TQQQ выведен 0/100
+    dist=W0;dot=DOT.warn;col=COL.warn;
+    label=m.overext?'Рынок перегрет по сводному показателю — TQQQ выведен'
+                   :'Перегрев снят, наклон EMA20 ниже порога — TQQQ пока не возвращаем';
+    ind=[`${scLine} — блок включён на пороге 2,5σ, снятие ниже 2,0σ`,
+         `наклон EMA20 <b>${pc2(sl)}</b> — возврат к базовой доле при значении выше +0,90%`];
+    act='держать '+W0;
   }else if(m.state==='RISKON'){
-    dist=W60;dot=DOT.acc;col=COL.acc;
+    dist=W100;dot=DOT.acc;col=COL.acc;
     if(m.co>0){                                          // тренд ослабевает → базовая доля
       label='Тренд ослабевает, доля скоро вернётся к базовой';
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — ниже порога +0,40%`,
            `снижение доли: <b>${m.co}</b> из 3 подтверждений`];
-      act='держать '+W60+'; при третьем подтверждении перейти на '+W40;
+      act='держать '+W100+'; при третьем подтверждении перейти на '+W20;
     }else{                                               // устойчивый восходящий тренд
       label='Устойчивый восходящий тренд — доля повышенная';
       ind=[`наклон EMA20 <b>${pc2(sl)}</b>, доля снизится при значении ниже +0,40%`,
            `${scLine} — при пороге блока 2,5σ`,`просадка в норме`];
-      act='держать '+W60;
+      act='держать '+W100;
     }
-  }else{                                                 // базовая доля 40/60
-    dist=W40;
+  }else{                                                 // базовая доля 20/80
+    dist=W20;
     if(m.pending==='RISKON'&&m.ci>0){                    // тренд усиливается → повышенная доля
       label='Тренд усиливается, копится сигнал на повышение доли';dot=DOT.acc;col=COL.acc;
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — выше порога +0,90%`,
            `переход к повышенной доле: <b>${m.ci}</b> из 5 подтверждений`,
            `${scLine} — при пороге блока 2,5σ`];
-      act='держать '+W40+'; при пятом подтверждении перейти на '+W60;
+      act='держать '+W20+'; при пятом подтверждении перейти на '+W100;
     }else{                                               // тренда нет → базовая доля
       label='Тренда нет — доли базовые';dot=DOT.base;col=COL.base;
       ind=[`наклон EMA20 <b>${pc2(sl)}</b> — ниже порога +0,90%`,
            `${scLine} — при пороге блока 2,5σ`,`просадка в норме`];
-      act='держать '+W40;
+      act='держать '+W20;
     }
   }
-  if(rebal)act=(wN>wP?`привести доли к ${dist}: продать часть QDTE, докупить TQQQ`
-                     :`привести доли к ${dist}: продать часть TQQQ, докупить QDTE`);
+  if(rebal)act=(wN>wP?`привести доли к ${dist}: ${wN===100?'продать весь QDTE':'продать часть QDTE'}, ${wP===0?'купить':'докупить'} TQQQ`
+                     :`привести доли к ${dist}: ${wN===0?'продать весь TQQQ':'продать часть TQQQ'}, ${wP===100?'купить':'докупить'} QDTE`);
   return{label,dot,col,dist:'',ind,act};        // доли печатаются в «Действие», не в заголовке
 }
 
@@ -610,9 +613,9 @@ function alBuild(ctx){
   const P=[],T=[],Q=[];
   const px=v=>fmt(v);
   const day=e=>e.d.slice(8,10)+'.'+e.d.slice(5,7);
-  const W={RISKOFF:'TQQQ 20% / QDTE 80%',BASE:'TQQQ 40% / QDTE 60%',
-           RISKON:'TQQQ 60% / QDTE 40%',CORE_OFF:'TQQQ 40% / QDTE 60%'};
-  const wOf=x=>({RISKOFF:20,BASE:40,RISKON:60,CORE_OFF:40})[x]||40;
+  const W={RISKOFF:'TQQQ 0% / QDTE 100%',BASE:'TQQQ 20% / QDTE 80%',
+           RISKON:'TQQQ 100% / QDTE 0%',CORE_OFF:'TQQQ 20% / QDTE 80%'};
+  const wOf=x=>({RISKOFF:0,BASE:20,RISKON:100,CORE_OFF:20})[x]||20;
 
   for(const e of EVS){
     switch(e.t){
@@ -629,7 +632,7 @@ function alBuild(ctx){
           det:`Закрытие <b>${px(e.c)}</b> выше уровня выхода <b>${px(e.ex)}</b>. Угроза выхода снята, действий нет.`});
       }else if(e.to===1&&e.from===0){
         P.push({lvl:'warn',t:`${day(e)}: просадка прошла −5% — жёлтая зона`,
-          det:`Доли зафиксированы на базовых TQQQ 40% / QDTE 60%: пока просадка глубже −5%, сигналы тренда не исполняются.`});
+          det:`Доли зафиксированы на базовых TQQQ 20% / QDTE 80%: пока просадка глубже −5%, сигналы тренда не исполняются.`});
         Q.push({lvl:'warn',t:`${day(e)}: реинвестирование выплат остановлено`,
           det:`Поступающие выплаты QDTE переводить в SGOV, а не докупать на них фонд.`});
       }else if(e.to===0){
@@ -652,8 +655,8 @@ function alBuild(ctx){
       P.push({lvl:'red',key:'rebal:'+e.state+':'+e.d,
         t:`${day(e)}: изменить доли — ${W[e.state]}`,
         det:`Было ${W[e.prev]}. `+
-            (wN>wP?'Доля TQQQ повышается: продать часть QDTE и докупить TQQQ до новых долей.'
-                  :'Доля TQQQ снижается: продать часть TQQQ и докупить QDTE до новых долей.')});
+            (wN>wP?(wN===100?'Доля TQQQ повышается до 100%: продать весь QDTE и купить TQQQ.':'Доля TQQQ повышается: продать часть QDTE и купить TQQQ до новых долей.')
+                  :(wN===0?'Перегрев: продать весь TQQQ и купить QDTE.':'Доля TQQQ снижается: продать часть TQQQ и докупить QDTE до новых долей.'))});
       break;}
 
     /* ---- ядро TQQQ ---- */
@@ -792,7 +795,7 @@ async function runAdvisor(){
 
     /* плашка режима (информационная — режим определяется автоматически) */
     $('regime').innerHTML=standard
-      ? `<div class="regime"><div class="t">Обычный режим: доли меняются по тренду</div><div class="s">Доля TQQQ — 60% при устойчивом восходящем тренде, 40% в обычных условиях, 20% при перегреве рынка по сводному показателю. Оба компонента остаются в позиции, пока просадка QQQ мельче −10%.</div></div>`
+      ? `<div class="regime"><div class="t">Обычный режим: доли меняются по тренду</div><div class="s">Доля TQQQ — 100% при устойчивом восходящем тренде, 20% в обычных условиях, 0% при перегреве рынка по сводному показателю. Оба компонента остаются в позиции, пока просадка QQQ мельче −10%.</div></div>`
       : `<div class="regime crisis"><div class="t">Кризисный режим: сигналы тренда не действуют</div><div class="s">Оба компонента в SGOV. Деньги разделены: 60% портфеля — закупочный резерв TQQQ, он вводится тремя лимитками; 40% ждут возврата QDTE одной сделкой.</div></div>`;
 
     /* ================= TQQQ ================= */

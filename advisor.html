@@ -223,8 +223,8 @@ document.getElementById('yr').textContent=new Date().getFullYear();
 const $=id=>document.getElementById(id);
 
 /* уровни просадки: множитель к ATH и подпись в % */
-const MULT={yellow:0.95,exit:0.90,t1:0.794,t2:0.705,t3:0.585};
-const DD={yellow:-5,exit:-10,t1:-20.6,t2:-29.5,t3:-41.5};
+const MULT={yellow:0.95,exit:0.90,t1:0.85,t2:0.75,t3:0.65};
+const DD={yellow:-5,exit:-10,t1:-15,t2:-25,t3:-35};
 
 /* параметры модуля аллокации (порт из бэктеста v2.2) */
 const MOD={ENTER:0.009,EXIT:0.004,CIN:5,COUT:3,SCON:2.5,SCOFF:2.0,YEL:-0.05,RED:-0.10,SW:10};
@@ -461,7 +461,7 @@ function scard(v){
 /* ---- МАШИНА ЯДРА ----
    Страница только сигналит — исполнение и журнал сделок остаются за пользователем.
    Пороги от ATH: EXIT −10% (выход ОБОИХ крыльев, сплит пулов → 60/40,
-   выключение модуля), T1 −20,6%, T2 −29,5%, T3 −41,5% (лестница TQQQ из боезапаса).
+   выключение модуля), T1 −15%, T2 −25%, T3 −35% (ступенчатая докупка TQQQ из закупочного резерва, доли 20/30/50).
 
    v3.1: при недельном закрытии ≤ −10% оба крыла полностью в SGOV; капитал
    сводится в сплит боезапас TQQQ 60% / резерв QDTE 40% (часть кэша доходного
@@ -473,11 +473,14 @@ function scard(v){
    внутридневному касанию в любой день.
    ЛЕСТНИЦА НАКОПИТЕЛЬНА (I-6): транши — заявки на ФИКСИРОВАННЫХ ценах, выставленных
    в момент выхода. Один раз за цикл; отскоком не отменяются. Сброс — при новом ATH.
-   РЕФЕРЕНС ВОЗВРАТА (I-7): цена уровня выхода (−10%), либо цена самого глубокого
-   ИСПОЛНЕННОГО транша — зафиксированное число, не пересчёт от текущего ATH.
+   ОПОРНАЯ ЦЕНА ВОЗВРАТА (I-7, ред. 24.09.2026): ВСЕГДА цена уровня выхода (−10%),
+   зафиксированная в момент выхода; исполненные транши её не переставляют.
+   Прежняя версия (опора = цена самого глубокого исполненного транша) снята:
+   на истории с 2010 года она возвращала остаток на первом отскоке внутри
+   падения (25.02.2022) и не давала выйти повторно до нового максимума.
    I-8: ложные циклы (выход → возврат выше цены выхода без траншей). Два подряд — флаг. */
-const CORE={EXIT:-0.10,T1:-0.206,T2:-0.295,T3:-0.415};
-const RUNG=[['T1',-0.206],['T2',-0.295],['T3',-0.415]];
+const CORE={EXIT:-0.10,T1:-0.15,T2:-0.25,T3:-0.35};
+const RUNG=[['T1',-0.15],['T2',-0.25],['T3',-0.35]];
 
 function runCoreTQQQ(rows,weekEnd){
   let out=false;               // в кризисе (вышли)
@@ -500,8 +503,8 @@ function runCoreTQQQ(rows,weekEnd){
     if(out){
       // транши: внутридневное касание, одноразово, в любой день (I-6)
       for(let j=0;j<3;j++){
-        if(!fired[j] && r.l<=rungPx[j]){ fired[j]=true; ref=rungPx[j];
-          ev.push({t:'rung',i,j,px:rungPx[j],inPos:[10,35,100][j]}); }
+        if(!fired[j] && r.l<=rungPx[j]){ fired[j]=true;          // опорная цена не меняется (I-7)
+          ev.push({t:'rung',i,j,px:rungPx[j],inPos:[20,50,100][j]}); }
       }
     }else if(ath>prevAth && prevAth>-Infinity){
       // новый ATH вне кризиса — цикл лестницы закрыт, флаги сброшены (I-6),
@@ -518,7 +521,7 @@ function runCoreTQQQ(rows,weekEnd){
           exitPx=ath*(1+CORE.EXIT);
           rungPx=RUNG.map(([,th])=>ath*(1+th));
           fired=[false,false,false];
-          ref=exitPx;                     // траншей ещё нет → референс = цена выхода
+          ref=exitPx;                     // опорная цена возврата = цена выхода (I-7)
           justExited=true;
           ev.push({t:'exit',i,px:exitPx,rungPx:rungPx.slice()});
         }
@@ -665,15 +668,15 @@ function alBuild(ctx){
         t:`${day(e)}: выход исполнен — продать TQQQ и QDTE, деньги в SGOV`,
         det:`Неделя закрылась ниже −10% от максимума (уровень <b>${px(e.px)}</b>). `+
             `Деньги в SGOV разделить: <b>60%</b> портфеля — закупочный резерв TQQQ, <b>40%</b> — резерв QDTE.<br>`+
-            `Выставить три лимитки на покупку TQQQ по уровням QQQ: <b>${px(e.rungPx[0])}</b> (на 10% резерва) · `+
-            `<b>${px(e.rungPx[1])}</b> (25%) · <b>${px(e.rungPx[2])}</b> (65%)`});
+            `Выставить три лимитки на покупку TQQQ по уровням QQQ: <b>${px(e.rungPx[0])}</b> (на 20% резерва) · `+
+            `<b>${px(e.rungPx[1])}</b> (30%) · <b>${px(e.rungPx[2])}</b> (50%)`});
       break;
 
     case 'tq-rung':
       T.push({lvl:'red',key:'rung:'+e.j+':'+e.px.toFixed(2),
         t:`${day(e)}: сработала лимитка ${e.j+1} — куплен TQQQ на уровне QQQ ${px(e.px)}`,
         det:`В позиции <b>${e.inPos}%</b> закупочного резерва, в SGOV осталось <b>${100-e.inPos}%</b>. `+
-            `Опорная цена возврата теперь <b>${px(e.px)}</b>.`});
+            `Опорная цена возврата остаётся уровнем выхода.`});
       break;
 
     case 'tq-ret':
@@ -828,7 +831,7 @@ async function runAdvisor(){
     }else{
       /* кризис: лестница ядра. Цены лимиток ЗАФИКСИРОВАНЫ в момент выхода (I-6),
          сработавшие транши помечены — они одноразовы и отскоком не отменяются. */
-      const RG=[['t1','−20,6% транш 1',0],['t2','−29,5% транш 2',1],['t3','−41,5% транш 3',2]];
+      const RG=[['t1','−15% транш 1',0],['t2','−25% транш 2',1],['t3','−35% транш 3',2]];
       const tqAtPx=px=>tqCur?tqCur*Math.pow(px/cur,3):null;
       const nowCls=dd<=DD.exit?'c-r':(dd<=DD.yellow?'c-y':'c-ok');
       let rows=`<div class="h"><span></span><span>${tqCur?'TQQQ (QQQ)':'QQQ'}</span></div>`+
@@ -842,19 +845,19 @@ async function runAdvisor(){
       $('tq-left').innerHTML=`<div class="lvls">${rows}</div>`;
 
       const nFired=tqCore.fired.filter(Boolean).length;
-      const invested=[0,10,35,100][nFired];              // накоплено в позиции, % закупочного резерва
+      const invested=[0,20,50,100][nFired];              // накоплено в позиции, % закупочного резерва
       const posTxt=nFired===3?'весь закупочный резерв введён, лимитки отработаны'
                  :nFired===0?'закупочный резерв целиком в SGOV'
                  :`в позиции ${invested}% закупочного резерва, ${100-invested}% в SGOV`;
       const nxtIdx=tqCore.fired.findIndex(f=>!f);
       const nxtPx=nxtIdx>=0?tqCore.rungPx[nxtIdx]:null;
-      const okRe=curW>tqCore.ref&&adx>25&&chop<45;       // опорная цена — ЗАФИКСИРОВАННАЯ (I-7)
-      const refTxt=`${fmt(tqCore.ref)}`+(nFired?` (уровень транша ${nFired})`:' (уровень выхода)');
+      const okRe=curW>tqCore.ref&&adx>25&&chop<45;       // опорная цена — уровень выхода, ЗАФИКСИРОВАНА (I-7)
+      const refTxt=`${fmt(tqCore.ref)} (уровень выхода)`;
       let label,ind,act;
       if(tqCore.justExited){label='Выход исполнен';
         ind=[`неделя закрылась ниже −10% от максимума`,
              `после продажи деньги делятся: 60% портфеля — закупочный резерв TQQQ, 40% — резерв QDTE`];
-        act=`продать TQQQ и QDTE полностью, деньги в SGOV; выставить три лимитки на покупку TQQQ по уровням QQQ ${fmt(tqCore.rungPx[0])} (10% резерва), ${fmt(tqCore.rungPx[1])} (25%), ${fmt(tqCore.rungPx[2])} (65%)`;
+        act=`продать TQQQ и QDTE полностью, деньги в SGOV; выставить три лимитки на покупку TQQQ по уровням QQQ ${fmt(tqCore.rungPx[0])} (20% резерва), ${fmt(tqCore.rungPx[1])} (30%), ${fmt(tqCore.rungPx[2])} (50%)`;
       }else if(okRe){label='Пора вернуть остаток в TQQQ';
         ind=[`закрытие <b>${fmt(curW)}</b> выше опорной цены ${refTxt}`+(weekDone?'':' · неделя ещё не закрыта'),
              `ADX ${adx.toFixed(1)} при пороге 25, CHOP ${chop.toFixed(1)} при пороге 45 — тренд подтверждён`];

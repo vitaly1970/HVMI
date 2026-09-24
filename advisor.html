@@ -533,26 +533,36 @@ function runCoreTQQQ(rows,weekEnd){
 function runCoreQDTE(rows,weekEnd){
   /* v3.1: две фазы. FULL (держим 100%) → OUT (100% в SGOV) при недельном закрытии
      ≤ −10%. Возврат — одной ступенью: закрытие выше уровня −10% (без ADX/CHOP с 24.09.2026).
-     Ступень −20% удалена. */
-  let phase='FULL', ath=-Infinity, outRef=null;
+     Ступень −20% удалена.
+     Ред. 24.09.2026: лимитка на выкуп QDTE на весь резерв при касании уровня −35%
+     (тот же уровень, что третья ступень TQQQ), исполняется по внутридневному минимуму
+     в любой день, один раз за коррекцию. После выкупа QDTE держится; повторный выход —
+     только после нового максимума закрытия QQQ (как у ядра TQQQ). */
+  let phase='FULL', ath=-Infinity, outRef=null, rungPx=null;
   let retReady=false;                     // условие возврата выполнено на посл. недельном закрытии
   let justOut=false;                      // выход произошёл именно на последнем баре
+  let bought=false;                       // QDTE выкуплен на уровне −35% в этой коррекции
+  let armed=true;                         // цикл заряжен; после выкупа взводится только новым ATH
   const ev=[];
   for(let i=0;i<rows.length;i++){
-    const r=rows[i]; ath=Math.max(ath,r.c);
+    const r=rows[i]; const prevAth=ath; ath=Math.max(ath,r.c);
     justOut=false;
+    if(phase==='FULL' && ath>prevAth && prevAth>-Infinity){bought=false; armed=true; rungPx=null;}
+    if(phase==='OUT' && rungPx!==null && r.l<=rungPx){   // выкуп по касанию −35% (любой день)
+      phase='FULL'; bought=true; armed=false; ev.push({t:'rung',i,px:rungPx}); outRef=null; continue;
+    }
     if(!weekEnd[i]) continue;             // ТОЛЬКО закрытие недели (II-2, II-3)
     const dd=r.c/ath-1;
     retReady=false;
     if(phase==='FULL'){
-      if(dd<=CORE.EXIT){phase='OUT'; outRef=ath*(1+CORE.EXIT); justOut=true; ev.push({t:'out',i});}
+      if(dd<=CORE.EXIT && armed){phase='OUT'; outRef=ath*(1+CORE.EXIT); rungPx=ath*(1+CORE.T3); justOut=true; ev.push({t:'out',i,rungPx});}
     }else{ // OUT
-      if(outRef!==null && r.c>outRef){ev.push({t:'ret',i,c:r.c,outRef});phase='FULL'; outRef=null; retReady=true;}
+      if(outRef!==null && r.c>outRef){ev.push({t:'ret',i,c:r.c,outRef});phase='FULL'; outRef=null; rungPx=null; retReady=true;}
     }
   }
   /* outRef — ЗАФИКСИРОВАННАЯ цена уровня −10% (от ATH на момент выхода);
      карточка сверяется с ней, а не пересчитывает от текущего ATH */
-  return{phase,outRef,retReady,justOut,ath,ev};
+  return{phase,outRef,rungPx,bought,retReady,justOut,ath,ev};
 }
 
 
@@ -658,7 +668,8 @@ function alBuild(ctx){
         det:`Неделя закрылась ниже −10% от максимума (уровень <b>${px(e.px)}</b>). `+
             `Деньги в SGOV разделить: <b>60%</b> портфеля — закупочный резерв TQQQ, <b>40%</b> — резерв QDTE.<br>`+
             `Выставить три лимитки на покупку TQQQ по уровням QQQ: <b>${px(e.rungPx[0])}</b> (на 20% резерва) · `+
-            `<b>${px(e.rungPx[1])}</b> (30%) · <b>${px(e.rungPx[2])}</b> (50%)`});
+            `<b>${px(e.rungPx[1])}</b> (30%) · <b>${px(e.rungPx[2])}</b> (50%). `+
+            `Четвёртая лимитка — QDTE на весь резерв 40% по уровню QQQ <b>${px(e.rungPx[2])}</b>.`});
       break;
 
     case 'tq-rung':
@@ -676,6 +687,12 @@ function alBuild(ctx){
       break;
 
     /* ---- ядро QDTE (выход общий с TQQQ, отдельно только возврат) ---- */
+    case 'qd-rung':
+      Q.push({lvl:'red',key:'rung:qd:'+e.px.toFixed(2),
+        t:`${day(e)}: исполнена лимитка QDTE — куплен на уровне QQQ ${px(e.px)}`,
+        det:`Резерв QDTE 40% портфеля целиком в позиции. Держать до следующего сигнала; сигнал возврата QDTE по закрытию недели больше не действует.`});
+      break;
+
     case 'qd-ret':
       Q.push({lvl:'red',key:'ret:qd:'+(e.outRef||0).toFixed(2),
         t:`${day(e)}: купить QDTE на весь резерв 40% портфеля`,
@@ -787,7 +804,7 @@ async function runAdvisor(){
     /* плашка режима (информационная — режим определяется автоматически) */
     $('regime').innerHTML=standard
       ? `<div class="regime"><div class="t">Обычный режим: доли меняются по тренду</div><div class="s">Доля TQQQ — 100% при устойчивом восходящем тренде, 40% в обычных условиях, 0% при перегреве рынка по сводному показателю. Оба компонента остаются в позиции, пока просадка QQQ мельче −10%.</div></div>`
-      : `<div class="regime crisis"><div class="t">Кризисный режим: сигналы тренда не действуют</div><div class="s">Оба компонента в SGOV. Деньги разделены: 60% портфеля — закупочный резерв TQQQ, он вводится тремя лимитками; 40% ждут возврата QDTE одной сделкой.</div></div>`;
+      : `<div class="regime crisis"><div class="t">Кризисный режим: сигналы тренда не действуют</div><div class="s">Оба компонента в SGOV. Деньги разделены: 60% портфеля — закупочный резерв TQQQ, он вводится тремя лимитками; 40% ждут возврата QDTE одной сделкой или выкупаются лимиткой на уровне −35%.</div></div>`;
 
     /* ================= TQQQ ================= */
     $('tq-nums').innerHTML=`QQQ <b>${fmt(cur)}</b> <span class="ref">(ATH ${fmt(ath)})</span>`+(tqCur?` · TQQQ <b>${fmt(tqCur)}</b>`:'');
@@ -845,7 +862,7 @@ async function runAdvisor(){
       if(tqCore.justExited){label='Выход исполнен';
         ind=[`неделя закрылась ниже −10% от максимума`,
              `после продажи деньги делятся: 60% портфеля — закупочный резерв TQQQ, 40% — резерв QDTE`];
-        act=`продать TQQQ и QDTE полностью, деньги в SGOV; выставить три лимитки на покупку TQQQ по уровням QQQ ${fmt(tqCore.rungPx[0])} (20% резерва), ${fmt(tqCore.rungPx[1])} (30%), ${fmt(tqCore.rungPx[2])} (50%)`;
+        act=`продать TQQQ и QDTE полностью, деньги в SGOV; выставить три лимитки на покупку TQQQ по уровням QQQ ${fmt(tqCore.rungPx[0])} (20% резерва), ${fmt(tqCore.rungPx[1])} (30%), ${fmt(tqCore.rungPx[2])} (50%) и лимитку на покупку QDTE на весь резерв 40% по уровню ${fmt(tqCore.rungPx[2])}`;
       }else if(okRe){label='Сигнал возврата: остаток резерва в TQQQ';
         ind=[`закрытие <b>${fmt(curW)}</b> выше опорной цены ${refTxt}`+(weekDone?'':' · неделя ещё не закрыта')];
         act='купить TQQQ на весь остаток резерва, неисполненные лимитки снять';
@@ -897,7 +914,12 @@ async function runAdvisor(){
          переведена в закупочный резерв TQQQ (распределение 60/40). Возврат — одной сделкой
          по зафиксированной цене уровня −10% (outRef), не пересчёт от текущего ATH. */
       const qs=qdCore.phase;let label,dot,col,ind,act;
-      if(qs==='FULL'){
+      if(qs==='FULL'&&qdCore.bought){
+        label='QDTE куплен на уровне −35%';dot='var(--ok-dot)';col='var(--ok)';
+        ind=[`резерв QDTE 40% портфеля целиком в позиции`,
+             `повторный выход QDTE — только после нового максимума QQQ`];
+        act='держать QDTE, выплаты направлять в SGOV';
+      }else if(qs==='FULL'){
         label='Держать QDTE полностью';dot='var(--ok-dot)';col='var(--ok)';
         ind=[`TQQQ выведен в SGOV; по QDTE решение — по закрытию недели`,
              `порог выхода — недельное закрытие ниже −10%`];
@@ -908,7 +930,7 @@ async function runAdvisor(){
         if(qdCore.justOut){
           label='Выход QDTE исполнен';
           ind=[`неделя закрылась ниже −10% от максимума`];
-          act='продать QDTE полностью, деньги в SGOV; 20% портфеля перевести в закупочный резерв TQQQ — резерв TQQQ 60%, резерв QDTE 40%';
+          act=`продать QDTE полностью, деньги в SGOV; 20% портфеля перевести в закупочный резерв TQQQ — резерв TQQQ 60%, резерв QDTE 40%; выставить лимитку на покупку QDTE на весь резерв по уровню QQQ ${qdCore.rungPx?fmt(qdCore.rungPx):'−35%'}`;
         }else if(okBack){
           label='Сигнал возврата QDTE';
           ind=[`закрытие <b>${fmt(curW)}</b> выше уровня −10% (<b>${fmt(qdCore.outRef)}</b>)`+(weekDone?'':' · неделя ещё не закрыта')];
@@ -917,8 +939,9 @@ async function runAdvisor(){
           label='Резерв QDTE в SGOV, ждём возврата';
           ind=[`в SGOV 40% портфеля`,
                `возврат одной сделкой при закрытии недели выше ${qdCore.outRef?fmt(qdCore.outRef):'—'}`,
+               `лимитка на выкуп по уровню −35% — QQQ ${qdCore.rungPx?fmt(qdCore.rungPx):'—'}`,
                `сейчас закрытие <b>${fmt(curW)}</b>`];
-          act='ничего не делать, держать резерв в SGOV';
+          act='ничего не делать, лимитка выставлена, резерв в SGOV';
         }
       }
       $('qd-right').innerHTML=scard({label,dot,col,dist:'',ind,act});

@@ -277,19 +277,6 @@ function isoWeekKey(dt){
 function ewm(a,al){const o=new Array(a.length);let s=a[0]||0;o[0]=s;for(let i=1;i<a.length;i++){s=al*a[i]+(1-al)*s;o[i]=s;}return o;}
 function smaArr(a,n){const o=new Array(a.length).fill(NaN);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n;}return o;}
 function cummax(a){const o=new Array(a.length);let m=-Infinity;for(let i=0;i<a.length;i++){m=Math.max(m,a[i]);o[i]=m;}return o;}
-/* ADX/CHOP как полные ряды (не только текущее значение) — нужны для прогона машины
-   ядра по недельным барам истории, а не только «сейчас». */
-function taSeries(rows,n=14){
-  const N=rows.length,tr=new Array(N).fill(0),pdm=new Array(N).fill(0),mdm=new Array(N).fill(0);
-  for(let i=1;i<N;i++){const h=rows[i].h,l=rows[i].l,pc=rows[i-1].c;
-    tr[i]=Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc));
-    const up=h-rows[i-1].h,dn=rows[i-1].l-l;pdm[i]=(up>dn&&up>0)?up:0;mdm[i]=(dn>up&&dn>0)?dn:0;}
-  const a=1/n,atr=ewm(tr,a),pd=ewm(pdm,a),md=ewm(mdm,a),dx=new Array(N).fill(0);
-  for(let i=0;i<N;i++){const p=100*pd[i]/(atr[i]||1e-9),m=100*md[i]/(atr[i]||1e-9);dx[i]=(p+m)?100*Math.abs(p-m)/(p+m):0;}
-  const adxArr=ewm(dx,a),chopArr=new Array(N).fill(NaN);
-  for(let i=n-1;i<N;i++){let s=0,hi=-1e9,lo=1e9;for(let j=i-n+1;j<=i;j++){s+=tr[j];hi=Math.max(hi,rows[j].h);lo=Math.min(lo,rows[j].l);}chopArr[i]=100*Math.log10(s/(hi-lo))/Math.log10(n);}
-  return{adxArr,chopArr,adx:adxArr[N-1],chop:chopArr[N-1]};
-}
 function weeklyCloses(rows){const wk=[];let cur=null,last=null;
   for(let i=0;i<rows.length;i++){const r=rows[i];const dt=new Date(r.d+'T12:00:00Z');
     const day=(dt.getUTCDay()+6)%7,th=new Date(dt);th.setUTCDate(dt.getUTCDate()-day+3);
@@ -466,7 +453,9 @@ function scard(v){
    v3.1: при недельном закрытии ≤ −10% оба крыла полностью в SGOV; капитал
    сводится в сплит боезапас TQQQ 60% / резерв QDTE 40% (часть кэша доходного
    крыла переливается в боезапас). Ступень QDTE −20% удалена. Возврат QDTE —
-   ОДНОЙ ступенью: недельное закрытие выше уровня −10% + ADX>25 + CHOP<45.
+   ОДНОЙ ступенью: недельное закрытие выше уровня −10%. Условие ADX>25 + CHOP<45
+   снято 24.09.2026: на истории с 2010 оно только задерживало возврат и дважды
+   (2018, 2025) возвращало в начало нового падения; просадку не сокращало.
 
    ТАЙМФРЕЙМ (I-4): сигналы выхода и возврата проверяются ТОЛЬКО на закрытии недели.
    Внутри недели фаза не меняется. Транши — исключение: лимитки исполняются по
@@ -525,7 +514,7 @@ function runCoreTQQQ(rows,weekEnd){
           justExited=true;
           ev.push({t:'exit',i,px:exitPx,rungPx:rungPx.slice()});
         }
-      }else if(r.c>ref && r.adx>25 && r.chop<45){
+      }else if(r.c>ref){                                  // возврат по цене, без ADX/CHOP (ред. 24.09.2026)
         // I-8: ложный цикл = вернулись выше цены самого выхода, транши не срабатывали
         if(!fired[0] && !fired[1] && !fired[2] && r.c>exitPx) falseRow++;
         else falseRow=0;
@@ -543,7 +532,7 @@ function runCoreTQQQ(rows,weekEnd){
 
 function runCoreQDTE(rows,weekEnd){
   /* v3.1: две фазы. FULL (держим 100%) → OUT (100% в SGOV) при недельном закрытии
-     ≤ −10%. Возврат — одной ступенью: закрытие выше уровня −10% + ADX>25 + CHOP<45.
+     ≤ −10%. Возврат — одной ступенью: закрытие выше уровня −10% (без ADX/CHOP с 24.09.2026).
      Ступень −20% удалена. */
   let phase='FULL', ath=-Infinity, outRef=null;
   let retReady=false;                     // условие возврата выполнено на посл. недельном закрытии
@@ -558,7 +547,7 @@ function runCoreQDTE(rows,weekEnd){
     if(phase==='FULL'){
       if(dd<=CORE.EXIT){phase='OUT'; outRef=ath*(1+CORE.EXIT); justOut=true; ev.push({t:'out',i});}
     }else{ // OUT
-      if(outRef!==null && r.c>outRef && r.adx>25 && r.chop<45){ev.push({t:'ret',i,c:r.c,outRef});phase='FULL'; outRef=null; retReady=true;}
+      if(outRef!==null && r.c>outRef){ev.push({t:'ret',i,c:r.c,outRef});phase='FULL'; outRef=null; retReady=true;}
     }
   }
   /* outRef — ЗАФИКСИРОВАННАЯ цена уровня −10% (от ATH на момент выхода);
@@ -569,7 +558,7 @@ function runCoreQDTE(rows,weekEnd){
 
 /* ================= СЛОЙ УВЕДОМЛЕНИЙ =================
    Надстройка над расчётом: читает уже посчитанные величины (tqCore, qdCore, mod,
-   dd, adx, chop, stale, live) и ничего в них не меняет.
+   dd, stale, live) и ничего в них не меняет.
    Уровни: red — требуется сделка (гасится вручную кнопкой «Исполнено»);
            warn — состояние изменилось, сделки нет (снимается само);
            none — служебное (снимается само).
@@ -682,7 +671,7 @@ function alBuild(ctx){
     case 'tq-ret':
       T.push({lvl:'red',key:'ret:tq:'+(e.ref||0).toFixed(2),
         t:`${day(e)}: купить TQQQ на весь остаток закупочного резерва`,
-        det:`Неделя закрылась на <b>${px(e.c)}</b> — выше опорной цены <b>${px(e.ref)}</b> при подтверждённом тренде. `+
+        det:`Неделя закрылась на <b>${px(e.c)}</b> — выше опорной цены <b>${px(e.ref)}</b>. `+
             `Коррекция пройдена: остаток резерва из SGOV возвращается в TQQQ одной сделкой, неисполненные лимитки снять.`});
       break;
 
@@ -690,7 +679,7 @@ function alBuild(ctx){
     case 'qd-ret':
       Q.push({lvl:'red',key:'ret:qd:'+(e.outRef||0).toFixed(2),
         t:`${day(e)}: купить QDTE на весь резерв 40% портфеля`,
-        det:`Неделя закрылась на <b>${px(e.c)}</b> — выше уровня −10% (<b>${px(e.outRef)}</b>) при подтверждённом тренде.`});
+        det:`Неделя закрылась на <b>${px(e.c)}</b> — выше уровня −10% (<b>${px(e.outRef)}</b>).`});
       break;
 
     case 'div':
@@ -737,7 +726,6 @@ async function runAdvisor(){
     const live=(qqqLive!=null);
     const cur=(live?qqqLive:last.c);
     const ddFrac=cur/ath-1, dd=100*ddFrac;
-    const {adxArr,chopArr,adx,chop}=taSeries(q);
 
     /* индикаторы модуля по дневным закрытиям QQQ */
     const closes=q.map(r=>r.c);
@@ -762,7 +750,7 @@ async function runAdvisor(){
        добавляется отдельным баром, лишь если текущая неделя УЖЕ закрыта (пятница
        позади) — иначе внутринедельное движение фазу не двигает; для него ниже
        считается предварительное предупреждение. */
-    const coreRows=q.map((r,i)=>({c:r.c,l:r.l,adx:adxArr[i],chop:chopArr[i]}));
+    const coreRows=q.map(r=>({c:r.c,l:r.l}));
     const weekEnd=new Array(q.length).fill(false);
     for(const w of wk) weekEnd[w.i]=true;
     /* Последний бар помечаем концом недели только если неделя реально закрыта.
@@ -851,7 +839,7 @@ async function runAdvisor(){
                  :`в позиции ${invested}% закупочного резерва, ${100-invested}% в SGOV`;
       const nxtIdx=tqCore.fired.findIndex(f=>!f);
       const nxtPx=nxtIdx>=0?tqCore.rungPx[nxtIdx]:null;
-      const okRe=curW>tqCore.ref&&adx>25&&chop<45;       // опорная цена — уровень выхода, ЗАФИКСИРОВАНА (I-7)
+      const okRe=curW>tqCore.ref;                          // опорная цена — уровень выхода, ЗАФИКСИРОВАНА (I-7); индикаторов нет
       const refTxt=`${fmt(tqCore.ref)} (уровень выхода)`;
       let label,ind,act;
       if(tqCore.justExited){label='Выход исполнен';
@@ -859,15 +847,14 @@ async function runAdvisor(){
              `после продажи деньги делятся: 60% портфеля — закупочный резерв TQQQ, 40% — резерв QDTE`];
         act=`продать TQQQ и QDTE полностью, деньги в SGOV; выставить три лимитки на покупку TQQQ по уровням QQQ ${fmt(tqCore.rungPx[0])} (20% резерва), ${fmt(tqCore.rungPx[1])} (30%), ${fmt(tqCore.rungPx[2])} (50%)`;
       }else if(okRe){label='Сигнал возврата: остаток резерва в TQQQ';
-        ind=[`закрытие <b>${fmt(curW)}</b> выше опорной цены ${refTxt}`+(weekDone?'':' · неделя ещё не закрыта'),
-             `ADX ${adx.toFixed(1)} при пороге 25, CHOP ${chop.toFixed(1)} при пороге 45 — тренд подтверждён`];
+        ind=[`закрытие <b>${fmt(curW)}</b> выше опорной цены ${refTxt}`+(weekDone?'':' · неделя ещё не закрыта')];
         act='купить TQQQ на весь остаток резерва, неисполненные лимитки снять';
       }else{label='Резерв в SGOV, ждём ступени докупки';
         const nx=nxtPx!=null?tqAtPx(nxtPx):null;
         const foreL=nxtPx!=null?`следующая лимитка — ${nx!=null?'TQQQ '+f1(nx)+', это уровень QQQ '+fmt(nxtPx):'уровень QQQ '+fmt(nxtPx)}`
                                :'все три лимитки исполнены, ждём сигнала возврата';
         ind=[posTxt,foreL,
-             `остаток вернётся в TQQQ при закрытии недели выше ${refTxt} с ADX выше 25 и CHOP ниже 45 · сейчас ADX ${adx.toFixed(1)}, CHOP ${chop.toFixed(1)}`];
+             `остаток вернётся в TQQQ при закрытии недели выше ${refTxt} · сейчас закрытие ${fmt(curW)}`];
         act=nxtPx!=null?'ничего не делать, лимитки выставлены':'ничего не делать, ждать сигнала возврата';
       }
       $('tq-right').innerHTML=scard({label,dot:'var(--red-dot)',col:'var(--red)',dist:'',ind,act});
@@ -875,7 +862,7 @@ async function runAdvisor(){
     }
 
     /* ================= QDTE ================= */
-    $('qd-nums').innerHTML=`QQQ <b>${fmt(cur)}</b> <span class="ref">(ATH ${fmt(ath)})</span> · `+(qdCur?`QDTE <b>${fmt(qdCur)}</b> <span class="ref">(справочно)</span> · `:'')+`ADX ${adx.toFixed(1)} · CHOP ${chop.toFixed(1)}`;
+    $('qd-nums').innerHTML=`QQQ <b>${fmt(cur)}</b> <span class="ref">(ATH ${fmt(ath)})</span> · `+(qdCur?`QDTE <b>${fmt(qdCur)}</b> <span class="ref">(справочно)</span> · `:'');
     const qdNowCls=dd<=DD.exit?'c-r':(dd<=DD.yellow?'c-y':'c-ok');
     $('qd-left').innerHTML=`<div class="lvls">`+
       `<div class="h"><span></span><span>QQQ</span></div>`+
@@ -916,7 +903,7 @@ async function runAdvisor(){
              `порог выхода — недельное закрытие ниже −10%`];
         act='держать QDTE полностью, выплаты направлять в SGOV';
       }else{ // OUT
-        const okBack=qdCore.outRef!==null&&curW>qdCore.outRef&&adx>25&&chop<45;
+        const okBack=qdCore.outRef!==null&&curW>qdCore.outRef;
         dot='var(--red-dot)';col='var(--red)';
         if(qdCore.justOut){
           label='Выход QDTE исполнен';
@@ -924,14 +911,13 @@ async function runAdvisor(){
           act='продать QDTE полностью, деньги в SGOV; 20% портфеля перевести в закупочный резерв TQQQ — резерв TQQQ 60%, резерв QDTE 40%';
         }else if(okBack){
           label='Сигнал возврата QDTE';
-          ind=[`закрытие <b>${fmt(curW)}</b> выше уровня −10% (<b>${fmt(qdCore.outRef)}</b>)`+(weekDone?'':' · неделя ещё не закрыта'),
-               `ADX <b>${adx.toFixed(1)}</b> при пороге 25, CHOP <b>${chop.toFixed(1)}</b> при пороге 45 — тренд подтверждён`];
+          ind=[`закрытие <b>${fmt(curW)}</b> выше уровня −10% (<b>${fmt(qdCore.outRef)}</b>)`+(weekDone?'':' · неделя ещё не закрыта')];
           act='купить QDTE на весь резерв 40% портфеля';
         }else{
           label='Резерв QDTE в SGOV, ждём возврата';
           ind=[`в SGOV 40% портфеля`,
-               `возврат одной сделкой при закрытии выше ${qdCore.outRef?fmt(qdCore.outRef):'—'} с ADX выше 25 и CHOP ниже 45`,
-               `сейчас закрытие <b>${fmt(curW)}</b>, ADX ${adx.toFixed(1)}, CHOP ${chop.toFixed(1)}`];
+               `возврат одной сделкой при закрытии недели выше ${qdCore.outRef?fmt(qdCore.outRef):'—'}`,
+               `сейчас закрытие <b>${fmt(curW)}</b>`];
           act='ничего не делать, держать резерв в SGOV';
         }
       }

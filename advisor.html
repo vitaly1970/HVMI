@@ -555,7 +555,7 @@ function runCoreQDTE(rows,weekEnd){
     const dd=r.c/ath-1;
     retReady=false;
     if(phase==='FULL'){
-      if(dd<=CORE.EXIT && armed){phase='OUT'; outRef=ath*(1+CORE.EXIT); rungPx=ath*(1+CORE.T3); justOut=true; ev.push({t:'out',i,rungPx});}
+      if(dd<=CORE.EXIT && armed){phase='OUT'; armed=false; outRef=ath*(1+CORE.EXIT); rungPx=ath*(1+CORE.T3); justOut=true; ev.push({t:'out',i,rungPx});}
     }else{ // OUT
       if(outRef!==null && r.c>outRef){ev.push({t:'ret',i,c:r.c,outRef});phase='FULL'; outRef=null; rungPx=null; retReady=true;}
     }

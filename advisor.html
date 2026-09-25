@@ -340,7 +340,7 @@ function runModule(closes,ema20,score){
   const N=closes.length,{ENTER,EXIT,CIN,COUT,SCON,SCOFF,YEL,RED,SW}=MOD;
   let state='BASE',ci=0,co=0,pending=null,overext=false,ath=-Infinity,prev='BASE';
   let out=null;
-  const ev=[],wOf=x=>({RISKOFF:0,BASE:40,RISKON:100,CORE_OFF:40})[x]||40;
+  const ev=[],wOf=x=>({RISKOFF:0,BASE:40,RISKON:100,CORE_OFF:40})[x]??40;
   for(let i=0;i<N;i++){
     ath=Math.max(ath,closes[i]);
     const dd=closes[i]/ath-1;
@@ -382,7 +382,7 @@ function moduleView(m,ddFrac){
   const sl=m.slope*100;
   const DOT={acc:'var(--acc)',base:'var(--sec)',warn:'var(--warn-dot)',ok:'var(--ok-dot)'};
   const COL={acc:'var(--acc)',base:'var(--sec)',warn:'var(--warn)',ok:'var(--ok)'};
-  const wOf=s=>({RISKOFF:0,BASE:40,RISKON:100,CORE_OFF:40})[s]||40;
+  const wOf=s=>({RISKOFF:0,BASE:40,RISKON:100,CORE_OFF:40})[s]??40;
   const wN=wOf(m.state), wP=wOf(m.prev);
   const rebal=wN!==wP;                                  // доля изменилась на этом баре → прямое указание
   const sg=x=>(x>=0?'+':'−')+Math.abs(x).toFixed(2);
@@ -617,7 +617,7 @@ function alBuild(ctx){
   const day=e=>e.d.slice(8,10)+'.'+e.d.slice(5,7);
   const W={RISKOFF:'TQQQ 0% / QDTE 100%',BASE:'TQQQ 40% / QDTE 60%',
            RISKON:'TQQQ 100% / QDTE 0%',CORE_OFF:'TQQQ 40% / QDTE 60%'};
-  const wOf=x=>({RISKOFF:0,BASE:40,RISKON:100,CORE_OFF:40})[x]||40;
+  const wOf=x=>({RISKOFF:0,BASE:40,RISKON:100,CORE_OFF:40})[x]??40;
 
   for(const e of EVS){
     switch(e.t){
